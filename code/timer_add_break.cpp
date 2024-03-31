@@ -8,6 +8,8 @@ int main
     RAssert(ArgumentCount == 2, "You have to pass a signle numer of minutes argument");
     u32 BreakMinutes = StringToU32(Arguments[1]);
     
+    RAssert(BreakMinutes <= 60, "Breaks larger than 60 min are not supported");
+    
     auto Arena = AllocateArenaZero(4_MB);
     char* FileContent = ReadWholeFile(Arena, "save.txt");
     RAssert(FileContent, "Could not read \"save.txt\" file!\nWin32 error code: %", GetSystemErrorCode());
@@ -57,6 +59,9 @@ int main
                 }
                 BreakStartTime.Minute = 60 + BreakStartTime.Minute - BreakMinutes;
             }
+            if(BreakStartTime < LastEntryTime)
+                BreakStartTime = LastEntryTime;
+            
             WriteString(FileStreamOut, "\ne:%", ToString(BreakStartTime));
             WriteString(FileStreamOut, "\ns:%", ToString(CurrentTime));
         } break;
@@ -81,6 +86,11 @@ int main
                 }
                 BreakEndTime.Minute = 60 - BreakEndTime.Minute + BreakMinutes;
             }
+            
+            auto CurrentTime = GetLocalTime();
+            if(BreakEndTime > CurrentTime)
+                BreakEndTime = CurrentTime;
+            
             WriteString(FileStreamOut, "\ns:%", ToString(BreakEndTime));
         } break;
     }

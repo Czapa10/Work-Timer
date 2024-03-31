@@ -8,7 +8,7 @@ set LinkerFlags= -incremental:no -opt:ref user32.lib
 cls
 
 cl %CompilerFlags% code/read_timer.cpp /link %LinkerFlags% | more
-rem cl %CompilerFlags% code/new_timer.cpp /link %LinkerFlags% | more
-rem cl %CompilerFlags% code/pause_timer.cpp /link %LinkerFlags% | more
-rem cl %CompilerFlags% code/start_timer.cpp /link %LinkerFlags% | more
-rem cl %CompilerFlags% code/timer_add_break.cpp /link %LinkerFlags% | more
+cl %CompilerFlags% code/new_timer.cpp /link %LinkerFlags% | more
+cl %CompilerFlags% code/pause_timer.cpp /link %LinkerFlags% | more
+cl %CompilerFlags% code/start_timer.cpp /link %LinkerFlags% | more
+cl %CompilerFlags% code/timer_add_break.cpp /link %LinkerFlags% | more

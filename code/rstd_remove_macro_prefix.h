@@ -1,5 +1,5 @@
 
-#define Debug rstd_Debug
+// #define Debug rstd_Debug // NOTE: by default rstd_Debug prefix is not removed
 #define PrintInDebugger rstd_PrintInDebugger
 #define RInvalidCodePath rstd_RInvalidCodePath
 #define WarningMessageBox rstd_WarningMessageBox

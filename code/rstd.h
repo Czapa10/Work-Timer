@@ -25,7 +25,7 @@ Define rstd_Debug to 0 to turn off assertions and to make release only code be c
 #include <cmath>
 
 #ifndef rstd_Debug
-#error "You have to define rstd_Debug. Define it to 0 for release build. Define it to 1 for debug build (in which rstd_Assert() works"
+#error "You have to define rstd_Debug. Define it to 0 for release build. Define it to 1 for debug build in which rstd_Assert() works"
 #endif
 
 #ifndef rstd_MemoryProfileFunction
@@ -39,6 +39,10 @@ Define rstd_Debug to 0 to turn off assertions and to make release only code be c
 
 #ifndef rstd_FileDebugEnabled
 #define rstd_FileDebugEnabled 0
+#endif
+
+#ifndef rstd_DoublyLinkedListAdvancedSanityCheckEnabled
+#define rstd_DoublyLinkedListAdvancedSanityCheckEnabled rstd_Debug
 #endif
 
 #ifndef rstd_MultiThreadingEnabled
@@ -240,9 +244,11 @@ namespace rstd
     ////////////////////
     // invalid values //
     ////////////////////
+    static constexpr uint8_t InvalidU8 = MaxU8;
     static constexpr uint16_t InvalidU16 = MaxU16;
     static constexpr uint32_t InvalidU32 = MaxU32;
     static constexpr uint64_t InvalidU64 = MaxU64;
+    static constexpr int8_t InvalidI8 = MinI8;
     static constexpr int16_t InvalidI16 = MinI16;
     static constexpr int32_t InvalidI32 = MinI32;
     static constexpr int64_t InvalidI64 = MinI64;
@@ -275,7 +281,7 @@ InternalPrintInDebugger(Format(_Fmt, __VA_ARGS__));
     //////////////////
     // TODO: Try to change it into template function
 #define rstd_RInvalidCodePath(_String, ...) \
-{ ShowErrorMessageBoxAndExitProcess(Format(_String, __VA_ARGS__).GetCString()); }
+{ ShowErrorMessageBoxAndExitProcess(Format<string<1020>>(_String, __VA_ARGS__).GetCString()); }
     
     // TODO: Try to change it into template function
 #define rstd_WarningMessageBox(_String, ...) \
@@ -325,9 +331,11 @@ rstd_BreakInDebugger;\
 #define rstd_DebugOnly(Code)
 #define rstd_ReleaseOnly(Code) Code
 #define rstd_Assert(Expr) 
-#define rstd_AssertM(Expr, Message) 
+#define rstd_AssertM(Expr, Message, ...) 
 #define rstd_InvalidCodePath
-#define rstd_InvalidDefaultCase
+#define rstd_InvalidCodePathM(Message, ...)
+#define rstd_RawAssert(Expr)
+#define rstd_InvalidDefaultCase default:;
     
 #endif
     
@@ -347,10 +355,13 @@ rstd_BreakInDebugger;\
 #define rstd_Defer3(x)    rstd_Defer2(x, __COUNTER__)
 #define rstd_defer(code)   auto rstd_Defer3(_defer_) = rstd::MakeDefer([&](){code;})
     
+    struct nullopt_t{};
+    constexpr nullopt_t NullOpt;
+    
     template<class type> struct optional
     {
         optional& operator=
- (const type& D)
+        (const type& D)
         {
             Data = D;
             Valid = true;
@@ -360,8 +371,17 @@ rstd_BreakInDebugger;\
         optional(const type& D)
         { *this = D; }
         
+        optional(nullopt_t)
+        { Valid = false; }
+        
         optional()
         { Valid = false; }
+        
+        type& Validate()
+        {
+            Valid = true;
+            return Data;
+        }
         
         operator rstd_bool()
         { return Valid; }
@@ -384,10 +404,17 @@ rstd_BreakInDebugger;\
         rstd_bool Valid;
     };
     
+    template<class type> void Swap(type& A, type& B)
+    {
+        auto TempA = A;
+        A = B;
+        B = TempA;
+    }
+    
     //////////
     // TIME //
     //////////
-    enum class month : u8
+    enum class month : u16
     {
         January = 1,
         February = 2,
@@ -420,7 +447,7 @@ rstd_BreakInDebugger;\
         {
             struct
             {
-                u8 Day;	
+                u16 Day;    
                 month Month;
                 u32 Year;
             };
@@ -434,9 +461,9 @@ rstd_BreakInDebugger;\
             struct
             {
                 u16 Millisecond;
-                u8 Second;
-                u8 Minute;
-                u8 Hour;
+                u16 Second;
+                u16 Minute;
+                u16 Hour;
             };
             u64 MillisecondSecondMinuteHourPack;
         };
@@ -458,7 +485,7 @@ rstd_BreakInDebugger;\
     }
     
     static u32 RandomU32
- (random_sequence& S)
+    (random_sequence& S)
     {
         // Algorithm "xor" from p. 4 of Marsaglia, "Xorshift RNGs"
         S.A ^= S.A << 13;
@@ -468,14 +495,14 @@ rstd_BreakInDebugger;\
     }
     
     static u32 RandomU32
- (random_sequence& S, u32 Max) // Min is 0
+    (random_sequence& S, u32 Max) // Min is 0
     {
         u32 N = RandomU32(S);
         return N % (Max + 1);
     }
     
     static u32 RandomU32
- (random_sequence& S, u32 Min, u32 Max)
+    (random_sequence& S, u32 Min, u32 Max)
     {
         u32 N = RandomU32(S);
         u32 Range = Max - Min + 1;
@@ -486,7 +513,7 @@ rstd_BreakInDebugger;\
     { return (u16)(RandomU32(S) % MaxU16); }
     
     static i32 RandomI32
- (random_sequence& S)
+    (random_sequence& S)
     {
         union u
         {
@@ -505,7 +532,7 @@ rstd_BreakInDebugger;\
     { return (f32)RandomU32(S) / MaxU32; }
     
     static f32 RandomF32
- (random_sequence& S, f32 Min, f32 Max)
+    (random_sequence& S, f32 Min, f32 Max)
     {
         rstd_RawAssert(Min <= Max);
         f32 Factor = RandomF32Between0And1(S);
@@ -520,10 +547,10 @@ rstd_BreakInDebugger;\
 #define rstd_ArrayCount(Arr) (sizeof(Arr)/sizeof((Arr)[0]))
     
 #define internal_rstd_RestOfIteratorFunctions \
-const iterator Begin() const \
+const iterator CBegin() const \
 { return const_cast<const iterator>(Begin()); } \
     \
-const iterator End() const \
+const iterator CEnd() const \
 { return const_cast<const iterator>(End()); } \
     \
 iterator begin() \
@@ -532,11 +559,11 @@ iterator begin() \
 iterator end() \
 { return End(); } \
     \
-const iterator begin() const \
-{ return Begin(); } \
+const iterator cbegin() const \
+{ return CBegin(); } \
     \
-const iterator end() const \
-{ return End(); } \
+const iterator cend() const \
+{ return CEnd(); } \
     \
 view<iterator> GetView() \
 { return {Begin(), End()}; } \
@@ -576,8 +603,10 @@ view<iterator> GetView() \
     
     template<class character> struct basic_string_view;
     
-    template<size Size = 256 - sizeof(u32), class character = char> struct string
+    template<size Size = 256 - sizeof(u32), class character_type = char> struct string
     {
+        using character = character_type;
+        
         mutable character Characters[Size];
         size Count;
         
@@ -618,7 +647,7 @@ view<iterator> GetView() \
         }
         
         string_type& operator=
- (const character* CString)
+        (const character* CString)
         { 
             rstd_AssertM(CString, "Call Clear() instead of assigning null or assign empty c-string");
             Count = 0;
@@ -632,7 +661,7 @@ view<iterator> GetView() \
         }
         
         template<size OtherSize> string_type& operator=
- (const string<OtherSize, character>& Other)
+        (const string<OtherSize, character>& Other)
         {
             rstd_Assert(Other.Count <= GetMaxCount());
             rstd_For(CharIndex, Other.Count)
@@ -673,28 +702,28 @@ view<iterator> GetView() \
         { return Count == 0; }
         
         character& operator[]
- (size Index)
+        (size Index)
         {
             rstd_AssertM(Index < Count, Format<string<>>("You tried to get character [%], but this string has only % characters", Index, Count).GetCString());
             return Characters[Index];
         }
         
         character operator[]
- (size Index) const
+        (size Index) const
         {
             rstd_AssertM(Index < Count, Format<string<>>("You tried to get character [%], but this string has only % characters", Index, Count).GetCString());
             return Characters[Index];
         }
         
         void operator+=
- (char C)
+        (char C)
         {
             Characters[Count++] = C;
             rstd_DebugOnly(InsertNullTerminator());
         }
         
         void operator+=
- (const char* CString)
+        (const char* CString)
         {
             for(auto* C = CString; *C; ++C)
             {
@@ -705,7 +734,7 @@ view<iterator> GetView() \
         }
         
         void operator+=
- (const rstd_generic_string& AppendedString)
+        (const rstd_generic_string& AppendedString)
         {
             rstd_Assert(Count + AppendedString.Count < GetMaxCount());
             rstd_For(CharIndex, AppendedString.Count)
@@ -714,7 +743,7 @@ view<iterator> GetView() \
         }
         
         void operator+=
- (rstd_generic_string_view View)
+        (rstd_generic_string_view View)
         {
             rstd_Assert(Count + View.Count < GetMaxCount());
             rstd_For(CharIndex, View.Count)
@@ -723,7 +752,7 @@ view<iterator> GetView() \
         }
         
         rstd_bool operator==
- (const rstd_generic_string& Other)
+        (const rstd_generic_string& Other)
         {
             if(Count != Other.Count)
                 return false;
@@ -738,13 +767,13 @@ view<iterator> GetView() \
         }
         
         rstd_bool operator!=
- (const rstd_generic_string& Other)
+        (const rstd_generic_string& Other)
         {
             return !(*this == Other);
         }
         
         rstd_bool operator==
- (const character* CString)
+        (const character* CString)
         {
             size CharIndex = 0;
             for(;;)
@@ -764,7 +793,7 @@ view<iterator> GetView() \
         }
         
         rstd_bool operator!=
- (const character* CString)
+        (const character* CString)
         {
             return !(*this == CString);
         }
@@ -775,7 +804,7 @@ view<iterator> GetView() \
     template<string_concept string_type, class... args> static string_type Format(const char* Format, args... Args);
     
     template<class string_type = string<>> static auto MakeStringUpToCount
- (const char* CString, size CharacterCount)
+    (const char* CString, size CharacterCount)
     {
         string_type Res;
         while(CString && Res.Count < CharacterCount)
@@ -784,7 +813,7 @@ view<iterator> GetView() \
     }
     
     template<class string_type = string<>> static auto MakeStringUntilCharacter
- (const char* CString, char EndCharacter)
+    (const char* CString, char EndCharacter)
     {
         string_type Res;
         while(*CString != EndCharacter)
@@ -795,21 +824,29 @@ view<iterator> GetView() \
         return Res;
     }
     
+    template<class string_type = string<>> static auto MakeStringUntilCharacter
+    (const rstd_stringlike& String, char EndCharacter)
+    { return MakeStringUntilCharacter(String.GetCString(), EndCharacter); }
+    
     template<class string_type = string<>, class end_condition> static auto MakeStringUntil
- (const char* CString, end_condition EndCondition)
+    (const char* CString, end_condition EndCondition)
     {
         string_type Res;
-        while(!EndCondition(*CString))
+        while(!EndCondition(CString))
         {
-            rstd_AssertM(*CString, "Null terminator was encontered before EndCondition");
+            rstd_AssertM(CString, "Null terminator was encontered before EndCondition");
             Res += *CString++;
         }
         return Res;
     }
     
+    template<class string_type = string<>, class end_condition> static auto MakeStringUntil
+    (const rstd_stringlike& String, end_condition EndCondition)
+    { return MakeStringUntil(String.GetCString(), EndCondition); }
+    
     // TODO: Compress MakeStringTillCharacterAndAdvanceCString functions
     template<class string_type = string<>> static auto MakeStringUntilCharacterAndAdvanceCString
- (char** CStringPtr, char EndCharacter)
+    (char** CStringPtr, char EndCharacter)
     {
         string_type Res;
         char* CString = *CStringPtr;
@@ -823,11 +860,11 @@ view<iterator> GetView() \
     }
     
     template<class string_type = string<>, class comparison_fn> static auto MakeStringUntilAndAdvanceCString
- (char** CStringPtr, comparison_fn EndCondition)
+    (char** CStringPtr, comparison_fn EndCondition)
     {
         string_type Res;
         char* CString = *CStringPtr;
-        while(!EndCondition(*CString))
+        while(!EndCondition(CString))
         {
             rstd_AssertM(*CString, "Null terminator was encontered before EndCharacter");
             Res += *CString++;
@@ -837,21 +874,21 @@ view<iterator> GetView() \
     }
     
     static char DigitToChar
- (u32 Digit)
+    (u32 Digit)
     { 
         rstd_RawAssert(Digit < 10);
         return '0' + (char)Digit;
     }
     
     static u32 CharToDigit
- (char Char)
+    (char Char)
     {
         rstd_RawAssert(Char >= '0' && Char <= '9');
         return (u32)(Char - '0');
     }
     
     static u32 GetDigitCount
- (u64 Int)
+    (u64 Int)
     {
         u32 Res = 1;
         while(Int /= 10)
@@ -860,7 +897,7 @@ view<iterator> GetView() \
     }
     
     template<u32 StringSize, class unsigned_integer> static auto UnsignedIntegerToString
- (unsigned_integer Int)
+    (unsigned_integer Int)
     {
         string<StringSize> Res;
         
@@ -870,7 +907,7 @@ view<iterator> GetView() \
         while(DigitCount)
         {
             Res[--DigitCount] = DigitToChar(Int % 10);
-            Int /= 10;	
+            Int /= 10;    
         }
         
         rstd_DebugOnly(Res.InsertNullTerminator());
@@ -879,7 +916,7 @@ view<iterator> GetView() \
     }
     
     template<u32 StringSize, class signed_integer> static auto SignedIntegerToString
- (signed_integer Int)
+    (signed_integer Int)
     {
         string<StringSize> Res;
         
@@ -933,16 +970,12 @@ view<iterator> GetView() \
     static auto ToString(i64 A)
     { return SignedIntegerToString<24>(A); }
     
-    // TODO: ToString(void*), Use it in debug.cpp
-    
     template<u32 string_size, class float_type> static string<string_size> FloatToString
- (float_type F, u32 Precision)
+    (float_type F, u32 Precision)
     {
-        // TODO: Handle special numbers like inf, nan
-        
         string<string_size> Res;
         
-        f32 Rounding = 5.f / pow(10.f, (f32)Precision + 1.f); // TODO: Replace pow with fm function
+        f32 Rounding = 5.f / pow(10.f, (f32)Precision + 1.f);
         
         if(F < 0)
         {
@@ -952,22 +985,29 @@ view<iterator> GetView() \
         
         u64 Integer = (u64)F;
         f64 Fraction = F - Integer + Rounding;
-        
-        if(Integer == 0)
-            Res += '0';
-        else
+        if(Fraction >= 1)
+        {
+            Integer++;
             Res += ToString(Integer);
+            Res += '.';
+            for(u32 I = 0; I < Precision; I++)
+                Res += '0';
+            return Res;
+        }
+        
+        Res += ToString(Integer);
         
         if(Precision > 0)
         {
             Res += '.';
-            while(Fraction < 0.1f)
+            while(Fraction < 0.1f && Precision > 1)
             {
                 Res += '0';
                 Fraction *= 10;
                 --Precision;
             }
-            Fraction *= pow(10, Precision); // TODO: Replace pow with fm function
+            
+            Fraction *= pow(10, Precision);
             Res += ToString((u64)Fraction);
         }
         
@@ -1002,7 +1042,7 @@ view<iterator> GetView() \
     { return String; }
     
     static char* GetNullTerminator
- (char* String)
+    (char* String)
     {
         char* C = String;
         while(*C)
@@ -1010,17 +1050,60 @@ view<iterator> GetView() \
         return C;
     }
     
-    template<class character> static rstd_bool CharIsAlpha(character C)
+    // is space character
+    template<class character> static rstd_bool GenericCharIsSpaceCharacter(character C)
+    { return C == ' ' || C == '\t' || C == '\n' || C == '\r'; }
+    
+    template<class character> static rstd_bool GenericFirstCharIsSpaceCharacter(const character* S)
+    { return GenericCharIsSpaceCharacter(*S); }
+    
+    static rstd_bool CharIsSpaceCharacter(char C)
+    { return C == ' ' || C == '\t' || C == '\n' || C == '\r'; }
+    
+    static rstd_bool FirstCharIsSpaceCharacter(const char* S)
+    { return CharIsSpaceCharacter(*S); }
+    
+    // is alpha
+    template<class character> static rstd_bool GenericCharIsAlpha(character C)
     { return (C >= 'A' && C <= 'Z') || (C >= 'a' && C <= 'z'); }
     
-    template<class character> static rstd_bool CharIsDigit(character C)
+    template<class character> static rstd_bool GenericFirstCharIsAlpha(const character* S)
+    { return GenericCharIsAlpha(*S); }
+    
+    static rstd_bool CharIsAlpha(char C)
+    { return (C >= 'A' && C <= 'Z') || (C >= 'a' && C <= 'z'); }
+    
+    static rstd_bool FirstCharIsAlpha(const char* S)
+    { return CharIsAlpha(*S); }
+    
+    // is digit
+    template<class character> static rstd_bool GenericCharIsDigit(character C)
     { return C >= '0' && C <= '9'; }
     
-    template<class character> static rstd_bool CharIsDigitOrPoint(character C)
+    template<class character> static rstd_bool GenericFirstCharIsDigit(const character* S)
+    { return GenericCharIsDigit(*S); }
+    
+    static rstd_bool CharIsDigit(char C)
+    { return C >= '0' && C <= '9'; }
+    
+    static rstd_bool FirstCharIsDigit(const char* S)
+    { return CharIsDigit(*S); }
+    
+    // is digit or point
+    template<class character> static rstd_bool GenericCharIsDigitOrPoint(character C)
     { return CharIsDigit(C) || C == '.'; }
     
+    template<class character> static rstd_bool GenericFirstCharIsDigitOrPoint(const character* S)
+    { return GenericCharIsDigitOrPoint(*S); }
+    
+    static rstd_bool CharIsDigitOrPoint(char C)
+    { return CharIsDigit(C) || C == '.'; }
+    
+    static rstd_bool FirstCharIsDigitOrPoint(const char* S)
+    { return CharIsDigitOrPoint(*S); }
+    
     static char ToUppercase
- (char C)
+    (char C)
     {
         if(C >= 97 && C <= 122)
             C -= ('a' - 'A');
@@ -1028,7 +1111,7 @@ view<iterator> GetView() \
     }
     
     static char ToLowercase
- (char C)
+    (char C)
     {
         if(C >= 65 && C <= 90)
             C += ('a' - 'A');
@@ -1036,7 +1119,7 @@ view<iterator> GetView() \
     }
     
     static rstd_bool StringsMatch
- (const char* A, const char* B)
+    (const char* A, const char* B)
     {
         for(;;)
         {
@@ -1052,7 +1135,7 @@ view<iterator> GetView() \
     }
     
     static rstd_bool StringsMatchUntilCharacter
- (const char* A, const char* B, char Character)
+    (const char* A, const char* B, char Character)
     {
         for(;;)
         {
@@ -1071,7 +1154,7 @@ view<iterator> GetView() \
     }
     
     static rstd_bool StringsMatchUntilRightStringTerminates
- (const char* Left, const char* Right)
+    (const char* Left, const char* Right)
     {
         for(;;)
         {
@@ -1088,7 +1171,7 @@ view<iterator> GetView() \
     
     template<class... right_strings>
         static rstd_bool StringsMatchUntilRightStringTerminates
- (const char* Left, const char* Right, right_strings... RightStrings)
+    (const char* Left, const char* Right, right_strings... RightStrings)
     {
         if(StringsMatchUntilRightStringTerminates(Left, Right))
             return true;
@@ -1097,7 +1180,7 @@ view<iterator> GetView() \
     }
     
     static rstd_bool StringsMatch
- (const char* A, const char* B, u32 Length)
+    (const char* A, const char* B, u32 Length)
     {
         rstd_For(CharIndex, Length)
         {
@@ -1108,7 +1191,7 @@ view<iterator> GetView() \
     }
     
     static rstd_bool AdvanceUntilCharacter
- (char** StringPtr, char Character)
+    (char** StringPtr, char Character)
     {
         char* C = *StringPtr;
         for(;;)
@@ -1128,7 +1211,7 @@ view<iterator> GetView() \
     }
     
     static rstd_bool AdvanceIfStringsMatchUntilRightStringTerminates
- (char** LeftPtr, const char* Right)
+    (char** LeftPtr, const char* Right)
     {
         char* Left = *LeftPtr;
         for(;;)
@@ -1148,7 +1231,7 @@ view<iterator> GetView() \
     }
     
     static rstd_bool AdvanceAfterCharacter
- (char** StringPtr, char Character)
+    (char** StringPtr, char Character)
     {
         rstd_bool Res = AdvanceUntilCharacter(StringPtr, Character);
         ++(*StringPtr);
@@ -1159,7 +1242,7 @@ view<iterator> GetView() \
     { return AdvanceAfterCharacter(StringPtr, '\n'); }
     
     static rstd_bool AdvanceUntilAlpha
- (char** StringPtr)
+    (char** StringPtr)
     {
         char* C = *StringPtr;
         for(;;)
@@ -1179,7 +1262,7 @@ view<iterator> GetView() \
     }
     
     static void CopyStringUntilChar
- (char* Dest, const char* Source, char EndChar)
+    (char* Dest, const char* Source, char EndChar)
     {
         while(*Source != EndChar)
         {
@@ -1190,7 +1273,7 @@ view<iterator> GetView() \
     }
     
     template<class string_type> static void CopyStringUntilChar
- (string_type* Dest, const char* Source, char EndChar)
+    (string_type* Dest, const char* Source, char EndChar)
     {
         while(*Source != EndChar)
         {
@@ -1200,7 +1283,7 @@ view<iterator> GetView() \
     }
     
     static void CopyString
- (char* Dest, const char* Source, u32 LengthWithNullChar)
+    (char* Dest, const char* Source, u32 LengthWithNullChar)
     {
         u32 CharIndex = 0;
         u32 Length = LengthWithNullChar - 1;
@@ -1210,7 +1293,7 @@ view<iterator> GetView() \
     }
     
     static u32 GetOffsetToChar
- (const char* String, char Char)
+    (const char* String, char Char)
     {
         u32 Offset = 0;
         while(String[Offset++] != Char);
@@ -1218,18 +1301,18 @@ view<iterator> GetView() \
     }
     
     static void JumpAfterChar
- (char** String, char Char)
+    (char** String, char Char)
     {
         while(**String != Char)
- (*String)++;
- (*String)++;
+        (*String)++;
+        (*String)++;
     }
     
     static void JumpToNextLine(char** String)
     { JumpAfterChar(String, '\n'); }
     
     static const char* GetPtrAfter
- (const char* String, const char* StringToLookFor)
+    (const char* String, const char* StringToLookFor)
     {
         while(*String)
         {
@@ -1256,12 +1339,12 @@ view<iterator> GetView() \
     }
     
     static const char* GetPtrAfter
- (const char* String, char CharacterToLookFor)
+    (const char* String, char CharacterToLookFor)
     {
         while(*String)
         {
             if(*String == CharacterToLookFor)
-                return String;
+                return ++String;
             
             ++String;
         }
@@ -1271,14 +1354,26 @@ view<iterator> GetView() \
     static char* GetPtrAfter(char* String, const char* StringToLookFor)
     { return const_cast<char*>(GetPtrAfter(const_cast<const char*>(String), StringToLookFor)); }
     
+    static const char* GetPtrAfter(const rstd_stringlike& String, const char* StringToLookFor)
+    { return GetPtrAfter(String.GetCString(), StringToLookFor); }
+    
+    static const char* GetPtrAfter(const rstd_stringlike& String, char CharacterToLookFor)
+    { return GetPtrAfter(String.GetCString(), CharacterToLookFor); }
+    
     static rstd_bool StringContains(const char* String, const char* StringToLookFor)
     { return GetPtrAfter(String, StringToLookFor); }
+    
+    static rstd_bool StringContains(const rstd_stringlike& String, const char* StringToLookFor)
+    { return GetPtrAfter(String.GetCString(), StringToLookFor); }
     
     static rstd_bool StringContains(const char* String, char CharacterToLookFor)
     { return GetPtrAfter(String, CharacterToLookFor); }
     
+    static rstd_bool StringContains(const rstd_stringlike& String, char CharacterToLookFor)
+    { return GetPtrAfter(String.GetCString(), CharacterToLookFor); }
+    
     static const char* GetPtrAfter
- (const char* String, const char* StringToLookFor, char EndChar)
+    (const char* String, const char* StringToLookFor, char EndChar)
     {
         while(*String && *String != EndChar)
         {
@@ -1311,9 +1406,9 @@ view<iterator> GetView() \
     { return GetPtrAfter(String, StringToLookFor, EndChar); }
     
     static f32 ReadF32
- (char** StringPtr)
+    (char** StringPtr)
     {
-        char* String = *StringPtr;
+        const char* String = *StringPtr;
         
         f32 Res = 0;
         u32 CharIndex = 0;
@@ -1374,9 +1469,9 @@ view<iterator> GetView() \
     }
     
     static u32 ReadU32
- (char** StringPtr)
+    (char** StringPtr)
     {
-        char* String = *StringPtr;
+        const char* String = *StringPtr;
         rstd_Assert(String);
         rstd_Assert(CharIsDigit(*String));
         u32 Res = 0, CharIndex = 0;
@@ -1390,9 +1485,9 @@ view<iterator> GetView() \
     }
     
     static i32 ReadI32
- (char** StringPtr)
+    (char** StringPtr)
     {
-        char* String = *StringPtr;
+        const char* String = *StringPtr;
         rstd_Assert(String);
         rstd_Assert(CharIsDigit(*String) || *String == '-');
         i32 Sign = 1;
@@ -1405,7 +1500,7 @@ view<iterator> GetView() \
     }
     
     static u16 ReadU16
- (char** StringPtr)
+    (char** StringPtr)
     {
         u32 Res = ReadU32(StringPtr);
         rstd_Assert(Res <= MaxU16);
@@ -1424,8 +1519,20 @@ view<iterator> GetView() \
     static u8 StringToU8(char* String)
     { return (u8)StringToU32(String); }
     
-    static rstd_bool StringToBool
- (char* String)
+    static f32 StringToF32(const rstd_stringlike& String)
+    { return StringToF32(String.GetCString()); }
+    
+    static u32 StringToU32(const rstd_stringlike& String)
+    { return StringToU32(String.GetCString()); }
+    
+    static u16 StringToU16(const rstd_stringlike& String)
+    { return StringToU16(String.GetCString()); }
+    
+    static u8 StringToU8(const rstd_stringlike& String)
+    { return StringToU8(String.GetCString()); }
+    
+    static rstd_bool OneZeroStringToBool
+    (const char* String)
     {
         if(*String == '1')
             return true;
@@ -1436,8 +1543,11 @@ view<iterator> GetView() \
         return false;
     }
     
+    static rstd_bool OneZeroStringToBool(const rstd_stringlike& String)
+    { return OneZeroStringToBool(String.GetCString()); }
+    
     static u64 HashString
- (const char* String)
+    (const char* String)
     {
         // NOTE: Murmur string hash, one byte at a time version
         
@@ -1452,7 +1562,7 @@ view<iterator> GetView() \
     }
     
     template<class string_type> static u64 HashString
- (const string_type& String)
+    (const string_type& String)
     {
         // NOTE: Murmur string hash, one byte at a time version
         
@@ -1471,11 +1581,11 @@ view<iterator> GetView() \
 #endif
     
     template<class string_type> static void InternalFormat
- (string_type& Res, const char* Format)
+    (string_type& Res, const char* Format)
     { Res = Format; }
     
     template<class string_type, class arg> static void InternalFormat
- (string_type& Res, const char* Format, arg Arg)
+    (string_type& Res, const char* Format, arg Arg)
     {
         rstd_DebugOnly(rstd_bool LastArgPeeledOff = false);
         rstd_RawAssert(*Format); // You passed more variadic arguments then you have % signs in Format<string>()
@@ -1505,7 +1615,7 @@ view<iterator> GetView() \
     }
     
     template<class string_type, class arg, class... args> static void InternalFormat
- (string_type& Res, const char* Format, arg Arg, args... Args)
+    (string_type& Res, const char* Format, arg Arg, args... Args)
     {
         for(;; ++Format)
         {
@@ -1532,7 +1642,7 @@ view<iterator> GetView() \
     }
     
     template<string_concept string_type = string<>, class... args> static string_type Format
- (const char* Fmt, args... Args)
+    (const char* Fmt, args... Args)
     {
         string_type Res;
         InternalFormat(Res, Fmt, Args...);
@@ -1570,10 +1680,16 @@ view<iterator> GetView() \
     { return "f64"; }
     
     // TODO: Add iterators, Add more helper functions
-    template<class character> struct basic_string_view
+    template<class character_type> struct basic_string_view
     {
+        using character = character_type;
+        
+        // TODO: In theory we shouldn't use InvalidU32 for Count because Count is of type size and not u32
+        
         mutable character* Characters;
+        private:
         size Count;
+        public:
         
         constexpr void IsRstdStringView() {}
         
@@ -1581,7 +1697,7 @@ view<iterator> GetView() \
             :Characters(const_cast<character*>(CString)), Count(InvalidU32) {}
         
         template<size Size> basic_string_view
- (const string<Size, character>& String)
+        (const string<Size, character>& String)
             :Characters((character*)String.GetCString()), Count(String.Count) {}
         
         basic_string_view(){}
@@ -1589,8 +1705,18 @@ view<iterator> GetView() \
         character* GetCString() const
         { return Characters; }
         
+        void AssertThatCountIsValid() const
+        {
+            rstd_AssertM(Count != InvalidU32,
+                         "This string_view object was probably initialized with c string\n"
+                         "because of that you have to call UpdateCount() before calling the function you called!");
+        }
+        
         size GetCount() const
-        { return Count; }
+        { 
+            AssertThatCountIsValid();
+            return Count;
+        }
         
         void UpdateCount()
         {
@@ -1603,25 +1729,24 @@ view<iterator> GetView() \
             }
         }
         
-        void AssertThatCountIsValid()
+        void UpdateCountIfIsInvalid()
         {
-            rstd_AssertM(Count != InvalidU32,
-                         "This string_view object was probably initialized with c string\n"
-                         "because of that you have to call UpdateCount() before calling the function you called!");
+            if(Count == InvalidU32)
+                UpdateCount();
         }
         
         character operator[]
- (size Index)
+        (size Index)
         {
             AssertThatCountIsValid();
-            return Characters[Count];
+            return Characters[Index];
         }
         
         void RemovePrefix(size NumberOfCharactesToRemove)
         { Characters += NumberOfCharactesToRemove; }
         
         void RemoveSuffix
- (size NumberOfCharactesToRemove)
+        (size NumberOfCharactesToRemove)
         {
             AssertThatCountIsValid();
             Count -= NumberOfCharactesToRemove;
@@ -1633,15 +1758,8 @@ view<iterator> GetView() \
     static auto ToString(rstd_generic_string_view View)
     { return View.Characters; }
     
-    static rstd_bool operator==
- (rstd_generic_string_view A, rstd_generic_string_view B)
-    {
-        rstd_AssertM(A.Count != InvalidU32 && B.Count != InvalidU32,
-                     "This string_view object was probably initialized with c string\n"
-                     "because of that you have to call UpdateCount() before using operator==");
-        
-        return (A.Count == B.Count) ? StringsMatch(A.GetCString(), B.GetCString()) : false;
-    }
+    static rstd_bool operator==(rstd_generic_string_view A, rstd_generic_string_view B)
+    { return (A.GetCount() == B.GetCount()) ? StringsMatch(A.GetCString(), B.GetCString()) : false; }
     
     static rstd_bool operator!=(rstd_generic_string_view A, rstd_generic_string_view B)
     { return !(A == B); }
@@ -1656,7 +1774,7 @@ view<iterator> GetView() \
     // TIME //
     //////////
     rstd_bool operator==
- (time A, time B)
+    (time A, time B)
     {
         if(A.Year == B.Year && A.Month == B.Month && A.Day == B.Day)
         {
@@ -1667,7 +1785,7 @@ view<iterator> GetView() \
     }
     
     rstd_bool operator<=
- (time A, time B)
+    (time A, time B)
     {
         if(A.DayMonthYearPack < B.DayMonthYearPack)
             return true;
@@ -1678,7 +1796,7 @@ view<iterator> GetView() \
     }
     
     rstd_bool operator>=
- (time A, time B)
+    (time A, time B)
     {
         if(A.DayMonthYearPack > B.DayMonthYearPack)
             return true;
@@ -1698,7 +1816,7 @@ view<iterator> GetView() \
     //       besides they could return const char* instead, Couldn't they
     
     static string<12> ToString
- (month M)
+    (month M)
     {
         switch(M)
         {
@@ -1720,7 +1838,7 @@ view<iterator> GetView() \
     }
     
     static month ReadMonth
- (char** StringPtr)
+    (char** StringPtr)
     {
         if(AdvanceIfStringsMatchUntilRightStringTerminates(StringPtr, "January"))
             return month::January;
@@ -1754,7 +1872,7 @@ view<iterator> GetView() \
     { return ReadMonth(&String); }
     
     static string<12> ToString
- (day_of_week D)
+    (day_of_week D)
     {
         switch(D)
         {
@@ -1770,8 +1888,12 @@ view<iterator> GetView() \
         return {};
     }
     
-    static string<4> MinuteToReadableString(u8 Minute)
-    { return Minute < 10 ? Format<string<4>>("0%", Minute) : ToString(Minute); }
+    static string<4> MinuteToReadableString
+    (u16 Minute)
+    { 
+        rstd_Assert(Minute <= 60);
+        return Minute < 10 ? Format<string<4>>("0%", Minute) : ToString((u8)Minute); 
+    }
     
     static string<> ToReadableString(time T)
     { return Format("% | % % % | %:%", T.DayOfWeek, T.Day, T.Month, T.Year, T.Hour, MinuteToReadableString(T.Minute)); }
@@ -1780,7 +1902,7 @@ view<iterator> GetView() \
     { return Format("%.%.%.%_%.%.%.%", T.Year, (u32)T.Month, T.Day, (u32)T.DayOfWeek, T.Hour, T.Minute, T.Second, T.Millisecond); }
     
     static time ReadTime
- (char** StringPtr)
+    (char** StringPtr)
     {
         time T;
         T.Year = ReadU32(StringPtr);
@@ -1913,14 +2035,14 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
     }
     
     template<class type> static type BytesToKilobytes
- (type Bytes)
+    (type Bytes)
     { 
         type Kilobytes = Bytes / 1024;
         return Kilobytes;
     }
     
     template<class type> static type BytesToMegabytes
- (type Bytes)
+    (type Bytes)
     { 
         type Megabytes = Bytes / 1024 / 1024;
         return Megabytes;
@@ -1952,11 +2074,11 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
     constexpr size ConstAlign(size Size, size Alignment)
     { return (Size + Alignment - 1) & ~(Alignment - 1); }
     
-    static void Zero(void* Ptr, size Size)
+    static void ZeroOut(void* Ptr, size Size)
     { memset(Ptr, 0, Size); }
     
-    template<class type> static void ZeroStruct(type& Instance)
-    { Zero(&Instance, sizeof(type)); }
+    template<class type> static void ZeroOutStruct(type& Instance)
+    { ZeroOut(&Instance, sizeof(type)); }
     
     static rstd_bool Equal(void* A, void* B, size Size)
     { return memcmp(A, B, Size) == 0; }
@@ -1965,7 +2087,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
     { return Equal(&A, &B, sizeof(type)); }
     
     static rstd_bool IsMemoryInitializedToZero
- (void* Memory, u32 MemorySize)
+    (void* Memory, u32 MemorySize)
     {
         u8* Mem = (u8*)Memory;
         rstd_For(Byte, MemorySize)
@@ -1980,7 +2102,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
     { return IsMemoryInitializedToZero(&Instance, sizeof(type)); }
     
     static string<> GetChoppedSizeText
- (u64 Size)
+    (u64 Size)
     {
         string<> Res;
         
@@ -2009,34 +2131,53 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
     static string<> GetChoppedSizeText(u32 Size)
     { return GetChoppedSizeText((u64)Size); }
     
-    static void* InternalGenAlloc
- (u32 Size, calling_info CallingInfo)
+    static void* InternalGenAllocUninitialized
+    (u32 Size, calling_info CallingInfo)
     {
         rstd_MemoryProfileFunction;
         void* Memory = malloc(Size);
+        rstd_RAssert(Memory, "malloc failed (probably you don't have any more memory in your machine)");
         MemoryDebug::RegisterGenAlloc(Memory, Size, CallingInfo);
         return Memory;
     }
     
+    static void* InternalGenAllocZero
+    (u32 Size, calling_info CallingInfo)
+    {
+        void* Memory = InternalGenAllocUninitialized(Size, CallingInfo);
+        memset(Memory, 0, Size);
+        return Memory;
+    }
+    
     static void InternalGenFree
- (void* Memory, calling_info CallingInfo)
+    (void* Memory, calling_info CallingInfo)
     {
         rstd_MemoryProfileFunction;
-        rstd_Assert(Memory);
         MemoryDebug::RegisterGenFree(Memory, CallingInfo);
         free(Memory);
     }
     
-#define GenAllocSize(_Size) InternalGenAlloc(_Size, rstd_GetCallingInfo())
-#define GenAllocStruct(_Type) (_Type*)GenAllocSize(sizeof(_Type))
-#define GenAllocArray(_Type, _Count) (_Type*)GenAllocSize(sizeof(_Type) * _Count)
-#define GenFree(_Memory) InternalGenFree(_Memory, rstd_GetCallingInfo())
+    static void InternalGenFreeAndSetPtrToNull
+    (void** Memory, calling_info CallingInfo)
+    {
+        InternalGenFree(*Memory, CallingInfo);
+        *Memory = nullptr;
+    }
+    
+#define GenAllocSizeUninitialized(_Size) InternalGenAllocUninitialized(_Size, rstd_GetCallingInfo())
+#define GenAllocStructUninitialized(_Type) (_Type*)GenAllocSizeUninitialized(sizeof(_Type))
+#define GenAllocArrayUninitialized(_Type, _Count) (_Type*)GenAllocSizeUninitialized(sizeof(_Type) * _Count)
+#define GenAllocSizeZero(_Size) InternalGenAllocZero(_Size, rstd_GetCallingInfo())
+#define GenAllocStructZero(_Type) (_Type*)GenAllocSizeZero(sizeof(_Type))
+#define GenAllocArrayZero(_Type, _Count) (_Type*)GenAllocSizeZero(sizeof(_Type) * _Count)
+#define GenFree(_Memory) InternalGenFree((void*)_Memory, rstd_GetCallingInfo())
+#define GenFreeAndSetPtrToNull(_Memory) InternalGenFreeAndSetPtrToNull((void**)&_Memory, rstd_GetCallingInfo())
     
     void* PageAlloc(size Bytes);
     void PageFree(void* Memory);
     
     static push_size_uninitialized_ex_res PushSizeUninitializedEx
- (arena& Arena, size Size)
+    (arena& Arena, size Size)
     {
         rstd_MemoryProfileFunction;
         
@@ -2085,7 +2226,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
     }
     
     static u8* InternalPushSizeUninitialized
- (arena& Arena, size Size, calling_info CallingInfo)
+    (arena& Arena, size Size, calling_info CallingInfo)
     { 
         rstd_MemoryProfileFunction;
         
@@ -2097,13 +2238,13 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
     }
     
     static u8* InternalPushSizeZero
- (arena& Arena, u32 Size, calling_info CallingInfo)
+    (arena& Arena, u32 Size, calling_info CallingInfo)
     {
         rstd_MemoryProfileFunction;
         
         auto Res = PushSizeUninitializedEx(Arena, Size);
         if(Res.GarbageBytes)
-            Zero(Res.Memory, Res.GarbageBytes);
+            ZeroOut(Res.Memory, Res.GarbageBytes);
         
         MemoryDebug::RegisterArenaPush(Arena, Res, Size,
                                        MemoryDebug::allocation_type::ArenaPushZero, CallingInfo);
@@ -2112,7 +2253,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
     }
     
     static char* InternalPushStringCopy
- (arena& Arena, const char* InitString, calling_info CallingInfo)
+    (arena& Arena, const char* InitString, calling_info CallingInfo)
     {
         rstd_MemoryProfileFunction;
         
@@ -2128,7 +2269,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
     }
     
     template<class type> static type& PushStruct
- (arena& Arena, const type& Init)
+    (arena& Arena, const type& Init)
     {
         auto& A = rstd_PushStructUninitialized(Arena, type);
         A = Init;
@@ -2136,7 +2277,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
     }
     
     static arena InternalAllocateArenaZero
- (size Size, calling_info CallingInfo, const char* DebugName = nullptr)
+    (size Size, calling_info CallingInfo, const char* DebugName = nullptr)
     {
         arena Arena;
         
@@ -2159,7 +2300,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
     }
     
     static arena InternalSubArena
- (arena& MasterArena, size Size, calling_info CallingInfo, const char* DebugName = nullptr)
+    (arena& MasterArena, size Size, calling_info CallingInfo, const char* DebugName = nullptr)
     {
         rstd_Assert(MasterArena.TempMemCount == 0);
         
@@ -2169,7 +2310,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
                                                  Size + sizeof(memory_block), CallingInfo);
         
         memory_block* MemBlock = (memory_block*)(Base + Size);
-        ZeroStruct(*MemBlock);
+        ZeroOutStruct(*MemBlock);
         MemBlock->Base = Base;
         MemBlock->Size = Size;
         SubArena.MemoryBlock = MemBlock;
@@ -2177,13 +2318,15 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         SubArena.MinimalAllocationSize = MasterArena.MinimalAllocationSize;
         SubArena.TempMemCount = 0;
         
+#if rstd_Debug
         MemoryDebug::RegisterCreateArena(SubArena, DebugName, MasterArena.DebugName, CallingInfo);
+#endif
         
         return SubArena;
     }
     
     static void Clear
- (arena& Arena)
+    (arena& Arena)
     {
         rstd_AssertM(Arena.TempMemCount == 0, "You forgot to call EndTemporaryMemory()");
         
@@ -2199,7 +2342,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
     
     // TODO: Can't we just store arena copy on stack?
     static void DeallocateArenaStoredInItself
- (arena& Arena)
+    (arena& Arena)
     {
         auto* MemBlock = Arena.MemoryBlock;
         while(MemBlock)
@@ -2213,7 +2356,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
     }
     
     static void DeallocateArena
- (arena& Arena)
+    (arena& Arena)
     {
         DeallocateArenaStoredInItself(Arena);
         Arena.MemoryBlock = nullptr;
@@ -2223,7 +2366,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
     { return !Arena.MemoryBlock->Prev; }
     
     static size GetUsed
- (arena& Arena)
+    (arena& Arena)
     {
         size Bytes = 0;
         auto* MemBlock = Arena.MemoryBlock;
@@ -2236,7 +2379,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
     }
     
     static size GetUsedWithNewBlockAllocationAlignment
- (arena& Arena)
+    (arena& Arena)
     {
         size Bytes = 0;
         auto* MemBlock = Arena.MemoryBlock;
@@ -2253,7 +2396,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
     }
     
     static size GetAllocatedBytes
- (arena& Arena)
+    (arena& Arena)
     {
         size Bytes = 0;
         auto* MemBlock = Arena.MemoryBlock;
@@ -2269,7 +2412,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
     { return MemBlock.Size - MemBlock.Used; }
     
     static temporary_memory BeginTemporaryMemory
- (arena& Arena)
+    (arena& Arena)
     {
         temporary_memory TempMem;
         TempMem.Arena = &Arena;
@@ -2282,7 +2425,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
     }
     
     static void EndTemporaryMemory
- (temporary_memory TempMem)
+    (temporary_memory TempMem)
     {
         rstd_AssertM(TempMem.DebugId == TempMem.Arena->TempMemCount, "Temporary memory that was created most recently has to be ended first");
         
@@ -2301,7 +2444,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
     }
     
     struct scope_temporary_memory
-    {	
+    {    
         temporary_memory TempMem;
         
         scope_temporary_memory(arena& Arena)
@@ -2324,7 +2467,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
     { return {Arena.MemoryBlock, Arena.MemoryBlock->Used}; }
     
     static void RevertArena
- (arena& Arena, arena_revert_point RevertPoint)
+    (arena& Arena, arena_revert_point RevertPoint)
     {
         while(Arena.MemoryBlock != RevertPoint.MemBlock)
         {
@@ -2364,7 +2507,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
     };
     
     static arena_ref ShareArena
- (arena& Arena)
+    (arena& Arena)
     {
         arena_ref Ref;
         Ref.ArenaPtr = &Arena;
@@ -2373,7 +2516,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
     }
     
     static arena_ref OwnArena
- (const arena& Arena)
+    (const arena& Arena)
     {
         arena_ref Ref;
         Ref.Arena = Arena;
@@ -2382,7 +2525,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
     }
     
     template<class dest_container, class source_container> void CopyElements
- (dest_container* Dest, source_container& Source)
+    (dest_container* Dest, source_container& Source)
     {
         Dest->Clear();
         for(auto& E : Source)
@@ -2397,6 +2540,175 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
     
     arena DefaultArena = InternalAllocateArenaZero(rstd_DefaultArenaInitialSize, calling_info(__FILE__, "none", __LINE__), "Default arena");
 #endif
+    ////////////////////////////////
+    // CONTAINER COMMON FUNCTIONS //
+    ////////////////////////////////
+    template<class compare_type>           
+        compare_type* FindEqual                            
+    (auto& Container, const compare_type& ThingToComare)        
+    {                                          
+        for(auto& Element : Container)         
+        {                                      
+            if(Element == ThingToComare)               
+                return &Element;               
+        }
+        return (decltype(Container.GetVariableOfElementType())*)nullptr;
+    }  
+    
+    auto* Find                           
+    (auto& Container, auto ComparisonFunc)
+    {                                    
+        for(auto& Element : Container)       
+        {                                
+            if(ComparisonFunc(Element))      
+                return &Element;         
+        }                                
+        return (decltype(Container.GetVariableOfElementType())*)nullptr;
+    }                                    
+    
+    auto& FindWithAssert 
+    (auto& Container, auto ComparisonFunc) 
+    { 
+        auto* Found = Find(Container, ComparisonFunc); 
+        rstd_Assert(Found); 
+        return *Found; 
+    } 
+    
+    rstd_bool HasEqual 
+    (auto& Container, const auto& ThingToCompare) 
+    { return (rstd_bool)FindEqual(Container, ThingToCompare); } 
+    
+    rstd_bool Has 
+    (auto& Container, auto ComparisonFunc) 
+    { return (rstd_bool)Find(Container, ComparisonFunc); } 
+    
+    u32 FindIndexOfFirstEqual 
+    (auto& Container, const auto& ThingToCompare) 
+    { 
+        u32 ElementIndex = 0; 
+        for(auto& Element : Container) 
+        { 
+            if(Element == ThingToCompare) 
+                return ElementIndex;
+            ++ElementIndex; 
+        } 
+        return InvalidU32; 
+    } 
+    
+    u32 FindIndexOfFirst 
+    (auto& Container, auto ComparisonFunc) 
+    { 
+        u32 ElementIndex = 0;
+        for(auto& Element : Container) 
+        { 
+            if(ComparisonFunc(Element)) 
+                return ElementIndex; 
+            ++ElementIndex; 
+        } 
+        return InvalidU32; 
+    } 
+    
+    u32 HowManyEqualHas 
+    (auto& Container, const auto& ThingToCompare) 
+    { 
+        u32 Res = 0; 
+        for(auto& Element : Container) 
+        { 
+            if(Element == ThingToCompare) 
+                ++Res; 
+        } 
+        return Res; 
+    } 
+    
+    u32 HowManyHas 
+    (auto& Container, auto ComparisonFunc) 
+    { 
+        u32 Res = 0; 
+        for(auto& Element : Container)
+        { 
+            if(ComparisonFunc(Element))
+                ++Res; 
+        } 
+        return Res;
+    } 
+    
+    template<class value_type> struct get_value_and_index_result 
+    { 
+        value_type* Value; 
+        u32 Index;
+        
+        operator rstd_bool() 
+        { return Value; } 
+        
+        value_type* operator->() 
+        {      
+            rstd_Assert(Value); 
+            return Value; 
+        } 
+    }; 
+    
+    template<class value_type>
+        get_value_and_index_result<value_type> FindValueAndIndex 
+    (const auto& Container, auto ComparisonFunc) 
+    { 
+        get_value_and_index_result<value_type> Res = {}; 
+        for(auto& E : Container) 
+        { 
+            if(ComparisonFunc(E))
+            {
+                Res.Value = &E; 
+                break;
+            }
+            ++Res.Index;
+        }
+        return Res;
+    }
+    
+    void ArraylikeRemovePointerAsserts
+    (auto& Container, auto* E) 
+    {
+        rstd_Assert(!Container.Empty());
+        auto* Elements = Container.Elements;
+        rstd_Assert(E >= Elements);
+        rstd_Assert(E < Elements + Container.Count);
+    }
+    
+    auto* ArraylikeRemove
+    (auto& Container, auto* E)
+    {
+        auto* Elements = Container.Elements;
+        u32& Count = Container.Count;
+        ArraylikeRemovePointerAsserts(Container, E);
+        if(E < Elements + Count - 1)
+            *E = Elements[Count - 1];
+        --Count;
+        return E - 1;
+    }
+    
+    auto* ArraylikeRemoveAndPersistOrder
+    (auto& Container, auto* E)
+    {
+        auto* Elements = Container.Elements;
+        u32& Count = Container.Count;
+        ArraylikeRemovePointerAsserts(Container, E);
+        if(&E < Elements + Count - 1)
+            memcpy(&E, &E + 1, (size_t)(((char*)(Elements + Count) - (char*)(&E))));
+        --Count;
+        return &E - 1;
+    }
+    
+    void ArraylikeRemove
+    (auto& Container, u32 Index)
+    {
+        auto* Elements = Container.Elements;
+        u32& Count = Container.Count;
+        rstd_Assert(!Container.Empty());
+        rstd_Assert(Index >= 0);
+        rstd_Assert(Index < Count);
+        if(Index < Count - 1)
+            Elements[Index] = Elements[Count - 1];
+        --Count;
+    }
     
     ///////////
     // ARRAY //
@@ -2408,6 +2720,8 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         
         type Elements[size];
         
+        array(){}
+        
         iterator Begin()
         { return Elements; }
         
@@ -2417,7 +2731,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         internal_rstd_RestOfIteratorFunctions;
         
         type& operator[]
- (u32 Index)
+        (u32 Index)
         {
             rstd_AssertM(Index < size,
                          "You tried to get element [%], but this array has only % elements", Index, size);
@@ -2430,152 +2744,56 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         void Zero()
         { Zero(Elements, size * sizeof(type)); }
         
+        type GetVariableOfElementType()
+        { return Elements[0]; }
+        
         type& GetFirst()
         { return *Elements; }
         
         type& GetLast()
         { return *(Elements + size - 1); }
         
-        template<class compare_type>               
-            type* FindEqual                            
- (const compare_type& ThingToComare)        
-        {                                          
-            for(auto& Element : *this)         
-            {                                      
-                if(Element == ThingToComare)               
-                    return &Element;               
-            }                                      
-            return nullptr;                        
-        }                                          
+        type* FindEqual(const auto& ThingToComare)        
+        { return ::FindEqual(*this, ThingToComare); }
         
-        template<class comparison_fn>        
-            type* Find                           
- (comparison_fn Comparison)           
-        {                                    
-            for(auto& Element : *this)       
-            {                                
-                if(Comparison(Element))      
-                    return &Element;         
-            }                                
-            return nullptr;                  
-        }                                    
+        type* Find(auto ComparisonFunc)           
+        { return ::Find(*this, ComparisonFunc); }                                    
         
-        template<class comparison_fn> 
-            auto& FindWithAssert 
- (comparison_fn Comparison) 
-        { 
-            auto* Found = Find(Comparison); 
-            rstd_Assert(Found); 
-            return *Found; 
-        } 
+        type& FindWithAssert(auto ComparisonFunc)
+        { return ::FindWithAssert(*this, ComparisonFunc); }
         
-        template<class compare_type> 
-            rstd_bool HasEqual 
- (const compare_type& ThingToCompare) 
-        { return (rstd_bool)FindEqual(ThingToCompare); } 
+        rstd_bool HasEqual(const auto& ThingToCompare) 
+        { return ::HasEqual(*this, ThingToCompare); } 
         
-        template<class comparison_fn> 
-            rstd_bool Has 
- (comparison_fn Comparison) 
-        { return (rstd_bool)Find(Comparison); } 
+        rstd_bool Has(auto ComparisonFunc) 
+        { return ::Find(ComparisonFunc); }
         
-        template<class compare_type> 
-            u32 FindIndexOfFirstEqual 
- (const compare_type& ThingToCompare) 
-        { 
-            u32 ElementIndex = 0; 
-            for(auto& Element : *this) 
-            { 
-                if(Element == ThingToCompare) 
-                    return ElementIndex; 
-                ++ElementIndex; 
-            } 
-            return InvalidU32; 
-        } 
+        u32 FindIndexOfFirstEqual(const auto& ThingToCompare)
+        {  return ::FindIndexOfFirstEqual(*this, ThingToCompare); } 
         
-        template<class comparison_fn> 
-            u32 FindIndexOfFirst 
- (comparison_fn Comparison) 
-        { 
-            u32 ElementIndex = 0; 
-            for(auto& Element : *this) 
-            { 
-                if(Comparison(Element)) 
-                    return ElementIndex; 
-                ++ElementIndex; 
-            } 
-            return InvalidU32; 
-        } 
+        u32 FindIndexOfFirst(auto ComparisonFunc) 
+        { return ::FindIndexOfFirst(*this, ComparisonFunc); } 
         
-        template<class compare_type> 
-            u32 HowManyEqualHas 
- (const compare_type& ThingToCompare) 
-        { 
-            u32 Res = 0; 
-            for(auto& Element : *this) 
-            { 
-                if(Element == ThingToCompare) 
-                    ++Res; 
-            } 
-            return Res; 
-        } 
+        u32 HowManyEqualHas(const auto& ThingToCompare) 
+        { return ::HowManyEqualHas(*this, ThingToCompare); } 
         
-        template<class comparison_fn> 
-            u32 HowManyHas 
- (comparison_fn Comparison) 
-        { 
-            u32 Res = 0; 
-            for(auto& Element : *this) 
-            { 
-                if(Comparison(Element)) 
-                    ++Res; 
-            } 
-            return Res; 
-        } 
+        u32 HowManyHas(auto ComparisonFunc) 
+        { return ::HowManyHas(*this, ComparisonFunc); } 
         
-        struct get_value_and_index_result 
-        { 
-            type* Value; 
-            u32 Index; 
-            
-            operator rstd_bool() 
-            { return Value; } 
-            
-            type* operator->() 
-            { 	 
-                rstd_Assert(Value); 
-                return Value; 
-            } 
-        }; 
-        
-        template<class comparison_fn> 
-            get_value_and_index_result FindValueAndIndex 
- (comparison_fn Comparison) 
-        { 
-            get_value_and_index_result Res = {}; 
-            for(auto& E : *this) 
-            { 
-                if(Comparison(E)) 
-                { 
-                    Res.Value = &E; 
-                    break; 
-                } 
-                ++Res.Index; 
-            } 
-            return Res; 
-        }
+        get_value_and_index_result<type> FindValueAndIndex 
+        (auto ComparisonFunc) 
+        { return ::FindValueAndIndex<type>(*this, ComparisonFunc); }
         
         rstd_bool HasPtr(const type* Ptr) 
         { return Ptr >= Elements && Ptr < Elements + size; } 
         
         u32 GetIndexFromPtr 
- (const type* Ptr) 
+        (const type* Ptr) 
         { 
             /* TODO: rstd_Assert(Is aligned to array elements) */ 
             rstd_Assert(HasPtr(Ptr)); 
             return (u32)((size_t)(Ptr - Elements)); 
         }
-        
     };
     
     ////////////////////
@@ -2594,7 +2812,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         
         template<class... args>
             pushable_array
- (const args&&... InitElements)
+        (const args&&... InitElements)
         {
             Count = 0;
             Push(InitElements...);
@@ -2609,14 +2827,17 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         internal_rstd_RestOfIteratorFunctions;
         
         type& operator[]
- (u32 Index)
+        (u32 Index)
         {
             rstd_AssertM(Index < Count,
                          "You tried to get element [%], but this pushable_array has only % elements", Index, Count);
             return Elements[Index];
         }
         
-        constexpr u32 GetMaxCount()
+        type GetVariableOfElementType()
+        { return Elements[0]; }
+        
+        static constexpr u32 GetMaxCount()
         { return size; }
         
         u32 GetCount()
@@ -2659,7 +2880,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         type& PushZero()
         {
             auto& Data = PushUninitialized();
-            ZeroStruct(Data);
+            ZeroOutStruct(Data);
             return Data;
         }
         
@@ -2677,56 +2898,33 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
             return nullptr;
         }
         
+        void PushMany
+        (type* Elems, u32 ElemsCount)
+        {
+            Assert(Count + ElemsCount < size);
+            memcpy(Elements + Count, Elems, ElemsCount * sizeof(type));
+        }
+        
         void Pop()
         {
             rstd_Assert(!Empty());
             --Count;
         }
         
-        void RemovePointerAsserts
- (type* E) 
-        {
-            rstd_Assert(!Empty());
-            rstd_Assert(E >= Elements);
-            rstd_Assert(E < Elements + Count);
-        }
-        
-        type* Remove
- (type* E)
-        {
-            RemovePointerAsserts(E);
-            if(E < Elements + Count - 1)
-                *E = Elements[Count - 1];
-            --Count;
-            return E - 1;
-        }
+        type* Remove(type* E)
+        { return ::ArraylikeRemove(*this, E); }
         
         void Remove(type& E)
         { Remove(&E); }
         
-        type* RemoveAndPersistOrder
- (type* E)
-        {
-            RemovePointerAsserts(E);
-            if(&E < Elements + Count - 1)
-                memcpy(&E, &E + 1, (size_t)(((char*)(Elements + Count) - (char*)(&E))));
-            --Count;
-            return &E - 1;
-        }
+        type* RemoveAndPersistOrder(type* E)
+        { ::ArraylikeRemoveAndPersistOrder(*this, E); }
         
         void RemoveAndPersistOrder(type& E)
         { RemoveAndPersistOrder(&E); }
         
-        void Remove
- (u32 Index)
-        {
-            rstd_Assert(!Empty());
-            rstd_Assert(Index >= 0);
-            rstd_Assert(Index < Count);
-            if(Index < Count - 1)
-                Elements[Index] = Elements[Count - 1];
-            --Count;
-        }
+        void Remove(u32 Index)
+        { ::ArraylikeRemove(*this, Index); }
         
         void PopFirst()
         { Remove(Elements); }
@@ -2748,137 +2946,39 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
             void StableSort(comparison_fn Comparison)
         { std::stable_sort(Elements, Elements + Count, Comparison); }
         
-        template<class compare_type>               
-            type* FindEqual                            
- (const compare_type& ThingToComare)        
-        {                                          
-            for(auto& Element : *this)         
-            {                                      
-                if(Element == ThingToComare)               
-                    return &Element;               
-            }                                      
-            return nullptr;                        
-        }                                          
+        type* FindEqual(const auto& ThingToComare)        
+        { return ::FindEqual(*this, ThingToComare); }                                          
         
-        template<class comparison_fn>        
-            type* Find                           
- (comparison_fn Comparison)           
-        {                                    
-            for(auto& Element : *this)       
-            {                                
-                if(Comparison(Element))      
-                    return &Element;         
-            }                                
-            return nullptr;                  
-        }                                    
+        type* Find(auto ComparisonFunc)
+        { return ::Find(*this, ComparisonFunc); }                                    
         
-        template<class comparison_fn> 
-            auto& FindWithAssert 
- (comparison_fn Comparison) 
-        { 
-            auto* Found = Find(Comparison); 
-            rstd_Assert(Found); 
-            return *Found; 
-        } 
+        type& FindWithAssert(auto ComparisonFunc) 
+        { return ::FindWithAssert(*this, ComparisonFunc); } 
         
-        template<class compare_type> 
-            rstd_bool HasEqual 
- (const compare_type& ThingToCompare) 
-        { return (rstd_bool)FindEqual(ThingToCompare); } 
+        rstd_bool HasEqual(const auto& ThingToCompare) 
+        { return ::HasEqual(*this, ThingToCompare); } 
         
-        template<class comparison_fn> 
-            rstd_bool Has 
- (comparison_fn Comparison) 
-        { return (rstd_bool)Find(Comparison); } 
+        rstd_bool Has(auto ComparisonFunc) 
+        { return ::Find(*this, ComparisonFunc); }
         
-        template<class compare_type> 
-            u32 FindIndexOfFirstEqual 
- (const compare_type& ThingToCompare) 
-        { 
-            u32 ElementIndex = 0; 
-            for(auto& Element : *this) 
-            { 
-                if(Element == ThingToCompare) 
-                    return ElementIndex; 
-                ++ElementIndex; 
-            } 
-            return InvalidU32; 
-        } 
+        u32 FindIndexOfFirstEqual(const auto& ThingToCompare)
+        {  return ::FindIndexOfFirstEqual(*this, ThingToCompare); } 
         
-        template<class comparison_fn> 
-            u32 FindIndexOfFirst 
- (comparison_fn Comparison) 
-        { 
-            u32 ElementIndex = 0; 
-            for(auto& Element : *this) 
-            { 
-                if(Comparison(Element)) 
-                    return ElementIndex; 
-                ++ElementIndex; 
-            } 
-            return InvalidU32; 
-        } 
+        u32 FindIndexOfFirst(auto ComparisonFunc) 
+        { return ::FindIndexOfFirst(*this, ComparisonFunc); } 
         
-        template<class compare_type> 
-            u32 HowManyEqualHas 
- (const compare_type& ThingToCompare) 
-        { 
-            u32 Res = 0; 
-            for(auto& Element : *this) 
-            { 
-                if(Element == ThingToCompare) 
-                    ++Res; 
-            } 
-            return Res; 
-        } 
+        u32 HowManyEqualHas(const auto& ThingToCompare) 
+        { return ::HowManyEqualHas(*this, ThingToCompare); } 
         
-        template<class comparison_fn> 
-            u32 HowManyHas 
- (comparison_fn Comparison) 
-        { 
-            u32 Res = 0; 
-            for(auto& Element : *this) 
-            { 
-                if(Comparison(Element)) 
-                    ++Res; 
-            } 
-            return Res; 
-        } 
+        u32 HowManyHas(auto ComparisonFunc) 
+        { return ::HowManyHas(*this, ComparisonFunc); } 
         
-        struct get_value_and_index_result 
-        { 
-            type* Value; 
-            u32 Index; 
-            
-            operator rstd_bool() 
-            { return Value; } 
-            
-            type* operator->() 
-            { 	 
-                rstd_Assert(Value); 
-                return Value; 
-            } 
-        }; 
-        
-        template<class comparison_fn> 
-            get_value_and_index_result FindValueAndIndex 
- (comparison_fn Comparison) 
-        { 
-            get_value_and_index_result Res = {}; 
-            for(auto& E : *this) 
-            { 
-                if(Comparison(E)) 
-                { 
-                    Res.Value = &E; 
-                    break; 
-                } 
-                ++Res.Index; 
-            } 
-            return Res; 
-        }
+        get_value_and_index_result<type> FindValueAndIndex 
+        (auto ComparisonFunc) 
+        { return ::FindValueAndIndex<type>(*this, ComparisonFunc); }
         
         type& Push 
- (const type& InitialData) 
+        (const type& InitialData) 
         { 
             auto& Data = PushUninitialized(); 
             Data = InitialData; 
@@ -2892,7 +2992,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         } 
         
         type* PushIfNotFull 
- (const type& InitialData) 
+        (const type& InitialData) 
         { 
             if(!Full()) 
                 return &Push(InitialData); 
@@ -2900,34 +3000,39 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         } 
         
         type* PushIfUnique 
- (const type& InitialData) 
+        (const type& InitialData) 
         { 
             if(!HasEqual(InitialData)) 
                 return &Push(InitialData); 
             return nullptr; 
         } 
         
-        template<class comparison_fn> 
-            type* PushIfUnique
- (const type& InitialData, comparison_fn Comparison) 
+        type* PushIfUnique
+        (const type& InitialData, auto ComparisonFunc) 
         { 
-            if(!Has(Comparison)) 
+            if(!Has(ComparisonFunc)) 
                 return &Push(InitialData); 
             return nullptr; 
         } 
         
-        type& GetIfExistsOrPushIfUnique 
- (const type& ThingToCompareOrInitialData) 
+        type& GetIfHasEqualOrPush
+        (const type& ThingToCompareOrInitialData) 
         { 
-            if(auto* Found = Find(ThingToCompareOrInitialData)) 
-                return *Found; 
-            return Push(ThingToCompareOrInitialData); 
+            if(auto* Found = FindEqual(ThingToCompareOrInitialData)) 
+                return *Found;
+            return Push(ThingToCompareOrInitialData);
         } 
         
-        /* TODO(now): Do args need to be templated? */ 
-        template<class... args> 
-            void Push 
- (const type& CurrentPushElement, const args&&... NextPushElements) 
+        type& GetIfHasOrPush
+        (auto ComparisonFunc, const type& InitialData) 
+        { 
+            if(auto* Found = Find(ComparisonFunc)) 
+                return *Found; 
+            return Push(InitialData); 
+        } 
+        
+        template<class... args> void Push 
+        (const type& CurrentPushElement, const args&&... NextPushElements) 
         { 
             Push(CurrentPushElement); 
             Push(NextPushElements...); 
@@ -2935,7 +3040,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         
         template<class compare_type> 
             rstd_bool RemoveFirstEqualTo 
- (const compare_type& ThingToCompare) 
+        (const compare_type& ThingToCompare) 
         { 
             if(auto* Found = FindEqual(ThingToCompare)) 
             { 
@@ -2947,7 +3052,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         
         template<class compare_type> 
             void RemoveFirstEqualToWithAssert 
- (const compare_type& ThingToCompare) 
+        (const compare_type& ThingToCompare) 
         { 
             bool ManagedToRemove = RemoveFirstEqualTo(ThingToCompare); 
             rstd_Assert(ManagedToRemove); 
@@ -2955,7 +3060,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         
         template<class comparison_fn> 
             rstd_bool RemoveFirstIf 
- (comparison_fn Comparison) 
+        (comparison_fn Comparison) 
         { 
             if(auto* Found = Find(Comparison)) 
             { 
@@ -2967,7 +3072,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         
         template<class comparison_fn> 
             void RemoveFirstIfWithAssert 
- (comparison_fn Comparison) 
+        (comparison_fn Comparison) 
         { 
             bool ManagedToRemove = RemoveFirstIf(Comparison); 
             rstd_Assert(ManagedToRemove); 
@@ -2975,7 +3080,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         
         template<class comparison_fn> 
             optional<type> RemoveFirstIfReturnCopy 
- (comparison_fn Comparison) 
+        (comparison_fn Comparison) 
         { 
             if(auto* Found = Find(Comparison)) 
             { 
@@ -2987,7 +3092,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         
         template<class comparison_fn> 
             u32 RemoveIf 
- (comparison_fn Comparison) 
+        (comparison_fn Comparison) 
         { 
             u32 RemovedCount = 0; 
             for(auto It = Begin(); It != End(); ++It) 
@@ -3065,7 +3170,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
             else 
             { 
                 auto* Last = &GetLast(); 
-                type LastCopy = *Last; 
+                type LastCopy = *Last;
                 Remove(Last); 
                 return LastCopy; 
             } 
@@ -3075,15 +3180,430 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         { return Ptr >= Elements && Ptr < Elements + Count; } 
         
         u32 GetIndexFromPtr 
- (const type* Ptr) 
+        (const type* Ptr) 
         { 
             /* TODO: rstd_Assert(Is aligned to array elements) */ 
             rstd_Assert(HasPtr(Ptr)); 
             return (u32)((size_t)(Ptr - Elements)); 
         }
         
+        pushable_array<type, size> SubArray
+        (auto Comparison)
+        {
+            pushable_array<type, size> Res;
+            
+            for(auto& E : *this)
+            {
+                if(Comparison(E))
+                    Res.Push(E);
+            }
+            
+            return Res;
+        }
     };
     
+    ///////////////////
+    // DYNAMIC ARRAY //
+    ///////////////////
+    template<class type> struct dynamic_array
+    {
+        using iterator = type*;
+        
+        type* Elements;
+        u32 Count;
+        u32 AllocatedCount;
+        arena_ref ArenaRef;
+        
+        void Init
+        (arena_ref ArenaRef_, u32 AllocationCount)
+        {
+            ArenaRef = ArenaRef_;
+            Count = 0;
+            Elements = rstd_PushArrayUninitialized(*ArenaRef, type, AllocationCount);
+            AllocatedCount = AllocationCount;
+        }
+        
+        dynamic_array(arena_ref ArenaRef, u32 AllocationCount)
+        { Init(ArenaRef, AllocationCount); }
+        
+        dynamic_array()
+        {
+            Elements = nullptr;
+            Count = AllocatedCount = 0;
+        }
+        
+#ifdef rstd_DefaultArena
+        dynamic_array(u32 AllocationCount)
+            :dynamic_array(ShareArena(DefaultArena), AllocationCount) {}
+        
+        void Init(u32 AllocationCount)
+        { Init(ShareArena(DefaultArena), AllocationCount); }
+#endif
+        
+        iterator Begin()
+        { return Elements; }
+        
+        iterator End()
+        { return Elements + Count; }
+        
+        internal_rstd_RestOfIteratorFunctions;
+        
+        type GetVariableOfElementType()
+        { return Elements[0]; }
+        
+        type& operator[]
+        (u32 Index)
+        {
+            rstd_AssertM(Index < Count,
+                         "You tried to get element [%], but this pushable_array has only % elements", Index, Count);
+            return Elements[Index];
+        }
+        
+        rstd_bool Empty()
+        { return Count == 0; }
+        
+        u32 GetCount()
+        { return Count; }
+        
+        void Clear()
+        { Count = 0; }
+        
+        bool IsInitialized()
+        { return AllocatedCount != 0; }
+        
+        void InternalPrepareSpaceForPush()
+        {
+            rstd_Assert(Elements);
+            
+            if(Count < AllocatedCount)
+                return;
+            
+            if(ArenaRef.OwnsArena)
+            {
+                // reserve more space on the arena, leaving the memory where it is
+                // we own the arena so we assume that nothing else has pushed the arena since our previous push
+                
+                // TODO: This doesn't work if arena expands, Fix it!
+                rstd_PushArrayUninitialized(*ArenaRef, type, AllocatedCount);
+                AllocatedCount *= 2;
+            }
+            else
+            {
+                // reserve totally new space on the arena and copy all the previously existing elements to new space
+                u32 AllocationCount = AllocatedCount * 2;
+                auto* NewElements = rstd_PushArrayUninitialized(*ArenaRef, type, AllocationCount);
+                memcpy(NewElements, Elements, AllocatedCount * sizeof(type));
+                AllocatedCount = AllocationCount;
+                Elements = NewElements;
+            }
+        }
+        
+        type& PushUninitialized()
+        { 
+            InternalPrepareSpaceForPush();
+            return Elements[Count++];
+        }
+        
+        type& PushZero()
+        { 
+            InternalPrepareSpaceForPush();
+            return Elements[Count++] = {};
+        }
+        
+        type& Push 
+        (const type& InitialData) 
+        { 
+            auto& Data = PushUninitialized(); 
+            Data = InitialData; 
+            return Data; 
+        } 
+        
+        type* FindEqual(const auto& ThingToComare)        
+        { return ::FindEqual(*this, ThingToComare); }
+        
+        type* Find(auto ComparisonFunc)
+        { return ::Find(*this, ComparisonFunc); }
+        
+        type& FindWithAssert(auto ComparisonFunc)
+        { return ::FindWithAssert(*this, ComparisonFunc); }
+        
+        rstd_bool HasEqual(const auto& ThingToCompare) 
+        { return ::HasEqual(*this, ThingToCompare); } 
+        
+        rstd_bool Has(auto ComparisonFunc) 
+        { return ::Find(ComparisonFunc); }
+        
+        u32 FindIndexOfFirstEqual(const auto& ThingToCompare)
+        {  return ::FindIndexOfFirstEqual(*this, ThingToCompare); } 
+        
+        u32 FindIndexOfFirst(auto ComparisonFunc) 
+        { return ::FindIndexOfFirst(*this, ComparisonFunc); } 
+        
+        u32 HowManyEqualHas(const auto& ThingToCompare) 
+        { return ::HowManyEqualHas(*this, ThingToCompare); } 
+        
+        u32 HowManyHas(auto ComparisonFunc) 
+        { return ::HowManyHas(*this, ComparisonFunc); } 
+        
+        get_value_and_index_result<type> FindValueAndIndex 
+        (auto ComparisonFunc) 
+        { return ::FindValueAndIndex<type>(*this, ComparisonFunc); }
+        
+        type* Remove(type* E)
+        { return ArraylikeRemove(*this, E); }
+        
+        void Remove(type& E)
+        { Remove(&E); }
+        
+        type* RemoveAndPersistOrder(type* E)
+        { ArraylikeRemoveAndPersistOrder(*this, E); }
+        
+        void RemoveAndPersistOrder(type& E)
+        { RemoveAndPersistOrder(&E); }
+        
+        void Remove(u32 Index)
+        { ArraylikeRemove(*this, Index); }
+        
+        type& GetIfHasEqualOrPush
+        (const type& ThingToCompareOrInitialData) 
+        { 
+            if(auto* Found = FindEqual(ThingToCompareOrInitialData)) 
+                return *Found;
+            return Push(ThingToCompareOrInitialData);
+        } 
+        
+        type& GetIfHasOrPush
+        (auto ComparisonFunc, const type& InitialData) 
+        { 
+            if(auto* Found = Find(ComparisonFunc)) 
+                return *Found; 
+            return Push(InitialData); 
+        } 
+    };
+    
+    /////////
+    // MAP //
+    /////////
+    template<class key, class value, u32 size>
+        struct map
+    {
+        template<class type, u32 size>
+            struct internal_array
+        {
+            using iterator = type*;
+            
+            type Elements[size];
+            u32& Count;
+            
+            internal_array(u32& _Count) : Count(_Count) {}
+            
+            iterator Begin()
+            { return Elements; }
+            
+            iterator End()
+            { return Elements + Count; }
+            
+            internal_rstd_RestOfIteratorFunctions;
+            
+            type& operator[]
+            (u32 Index)
+            {
+                rstd_AssertM(Index < Count,
+                             "You tried to get element [%], but the element count of map is only %", Index, Count);
+                return Elements[Index];
+            }
+            
+            constexpr u32 GetCount()
+            { return Count; }
+            
+            void Zero()
+            { Zero(Elements, size * sizeof(type)); }
+            
+            type GetVariableOfElementType()
+            { return Elements[0]; }
+            
+            type& GetFirst()
+            { return *Elements; }
+            
+            type& GetLast()
+            { return *(Elements + Count - 1); }
+            
+            type* FindEqual(const auto& ThingToComare)        
+            { return ::FindEqual(*this, ThingToComare); }
+            
+            type* Find(auto ComparisonFunc)           
+            { return ::Find(*this, ComparisonFunc); }                                    
+            
+            type& FindWithAssert(auto ComparisonFunc)
+            { return ::FindWithAssert(*this, ComparisonFunc); }
+            
+            rstd_bool HasEqual(const auto& ThingToCompare) 
+            { return ::HasEqual(*this, ThingToCompare); } 
+            
+            rstd_bool Has(auto ComparisonFunc) 
+            { return ::Find(ComparisonFunc); }
+            
+            u32 FindIndexOfFirstEqual(const auto& ThingToCompare)
+            {  return ::FindIndexOfFirstEqual(*this, ThingToCompare); } 
+            
+            u32 FindIndexOfFirst(auto ComparisonFunc) 
+            { return ::FindIndexOfFirst(*this, ComparisonFunc); } 
+            
+            u32 HowManyEqualHas(const auto& ThingToCompare) 
+            { return ::HowManyEqualHas(*this, ThingToCompare); } 
+            
+            u32 HowManyHas(auto ComparisonFunc) 
+            { return ::HowManyHas(*this, ComparisonFunc); } 
+            
+            get_value_and_index_result<type> FindValueAndIndex 
+            (auto ComparisonFunc) 
+            { return ::FindValueAndIndex<type>(*this, ComparisonFunc); }
+            
+            rstd_bool HasPtr(const type* Ptr) 
+            { return Ptr >= Elements && Ptr < Elements + Count; } 
+            
+            u32 GetIndexFromPtr 
+            (const type* Ptr) 
+            { 
+                /* TODO: rstd_Assert(Is aligned to array elements) */ 
+                rstd_Assert(HasPtr(Ptr)); 
+                return (u32)((size_t)(Ptr - Elements)); 
+            }
+        };
+        
+        internal_array<key, size> Keys;
+        internal_array<value, size> Values;
+        u32 Count;
+        
+        map() :Keys(Count), Values(Count), Count(0) {}
+        
+        void Clear()
+        { Count = 0; }
+        
+        u32 GetCount()
+        { return Count; }
+        
+        constexpr u32 GetMaxCount()
+        { return size; }
+        
+        void Push
+        (const key& Key, const value& Value)
+        {
+            rstd_Assert(Count < size);
+            Keys.Elements[Count] = Key;
+            Values.Elements[Count] = Value;
+            Count++;
+        }
+        
+        value& PushUninitialized
+        (const key& Key)
+        {
+            rstd_Assert(Count < size);
+            Keys.Elements[Count] = Key;
+            auto& Res = Values.Elements[Count];
+            Count++;
+            return Res;
+        }
+        
+        value* FindEqualValue
+        (const key& Key)
+        {
+            for(u32 I = 0; I < Count; I++)
+            {
+                if(Keys.Elements[I] == Key)
+                    return &Values.Elements[I];
+            }
+            return nullptr;
+        }
+        
+        value& FindEqualValueWithAssert
+        (const key& Key)
+        {
+            auto* Found = FindEqualValue(Key);
+            rstd_Assert(Found);
+            return *Found;
+        }
+        
+        value* FindEqualValue
+        (const value& Value)
+        {
+            for(u32 I = 0; I < Count; I++)
+            {
+                if(Values.Elements[I] == Value)
+                    return &Values.Elements[I];
+            }
+            return nullptr;
+        }
+        
+        value& FindEqualValueWithAssert
+        (const value& Value)
+        {
+            auto* Found = FindEqualValue(Value);
+            rstd_Assert(Found);
+            return *Found;
+        }
+        
+        value* FindValueFromKeyComparison
+        (auto ComparisonFunc)
+        {
+            for(u32 I = 0; I < Count; I++)
+            {
+                if(ComparisonFunc(Keys.Elements[I]))
+                    return &Values.Elements[I];
+            }
+            return nullptr;
+        }
+        
+        value& FindValueFromKeyComparisonWithAssert
+        (auto ComparisonFunc)
+        {
+            auto* Found = FindValueKeyComparison(ComparisonFunc);
+            rstd_Assert(Found);
+            return *Found;
+        }
+        
+        value* FindValueFromValueComparison
+        (auto ComparisonFunc)
+        {
+            for(u32 I = 0; I < Count; I++)
+            {
+                if(ComparisonFunc(Values.Elements[I]))
+                    return &Values.Elements[I];
+            }
+            return nullptr;
+        }
+        
+        value& FindValueFromValueComparisonWithAssert
+        (auto ComparisonFunc)
+        {
+            auto* Found = FindValueFromValueComparison(ComparisonFunc);
+            rstd_Assert(Found);
+            return *Found;
+        }
+        
+        key* FindKeyFromValueComparison
+        (auto ComparisonFunc)
+        {
+            for(u32 I = 0; I < Count; I++)
+            {
+                if(ComparisonFunc(Values.Elements[I]))
+                    return &Keys.Elements[I];
+            }
+            return nullptr;
+        }
+        
+        key& FindKeyFromValueComparisonWithAssert
+        (auto ComparisonFunc)
+        {
+            auto* Found = FindKeyFromValueComparison(ComparisonFunc);
+            rstd_Assert(Found);
+            return *Found;
+        }
+    };
+    
+    ////////////////////////
+    // DOUBLY LINKED LIST //
+    ////////////////////////
     template<class type>
         struct doubly_linked_list
     {
@@ -3103,11 +3623,14 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         node* Nodes;
         node* FreeNodes;
         
+        type GetVariableOfElementType()
+        { return Sentinel->Data; }
+        
         rstd_bool Initialized()
         { return Nodes; }
         
         doubly_linked_list
- (arena_ref ArenaRef)
+        (arena_ref ArenaRef)
         {
             this->ArenaRef = ArenaRef;
             Sentinel = &rstd_PushStructUninitialized(*ArenaRef, doubly_linked_list<type>::node);
@@ -3157,7 +3680,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
             }
             
             iterator& operator+=
- (u32 Offset) 
+            (u32 Offset) 
             {
                 while(Offset--)
                     Node = Node->Next;
@@ -3165,7 +3688,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
             }
             
             iterator& operator-=
- (u32 Offset)
+            (u32 Offset)
             {
                 while(Offset--)
                     Node = Node->Prev;
@@ -3173,24 +3696,24 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
             }
             
             iterator operator+
- (u32 Offset)
+            (u32 Offset)
             {
                 auto Res = *this;
                 return Res += Offset;
             }
             
             iterator operator-
- (u32 Offset)
+            (u32 Offset)
             {
                 auto Res = *this;
                 return Res -= Offset;
             }
             
             u32 operator-
- (iterator Rhs)
+            (iterator Rhs)
             {
                 u32 Diff = 0;
-                while(Node != Rhs.Node)	
+                while(Node != Rhs.Node)    
                 {
                     Rhs = Rhs.Prev;
                     ++Diff;
@@ -3238,7 +3761,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         { return Sentinel->Next == Sentinel; }
         
         type& operator[]
- (u32 DesiredIndex)
+        (u32 DesiredIndex)
         {
             rstd_Assert(!Empty());
             
@@ -3274,7 +3797,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
             rstd_Assert(FreeNodes != Sentinel);
             rstd_Assert(Sentinel->Next && Sentinel->Prev);
             
-#ifdef rstd_EnableDoublyLinkedListAdvancedSanityCheck	
+#if rstd_DoublyLinkedListAdvancedSanityCheckEnabled
             auto* Prev = Sentinel;
             auto* Current = Sentinel->Next;
             while(Current != Sentinel)
@@ -3291,9 +3814,9 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         }
         
 #ifndef rstd_DisableWarningForUsingGetCountInListsWithoutCounter
- [[deprecated("\nConsider using doubly_linked_list_with_counter instead of doubly_linked_list\n"
-              "if you want to call GetCount(); in most cases that will result in better performance.\n"
-              "If you want to get rid of this warning you can #define rstd_DisableWarningForUsingGetCountInListsWithoutCounter.")]]
+        [[deprecated("\nConsider using doubly_linked_list_with_counter instead of doubly_linked_list\n"
+                     "if you want to call GetCount(); in most cases that will result in better performance.\n"
+                     "If you want to get rid of this warning you can #define rstd_DisableWarningForUsingGetCountInListsWithoutCounter.")]]
 #endif
         u32 GetCount()
         {
@@ -3305,7 +3828,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         }
         
         void PushNode
- (node* Node)
+        (node* Node)
         {
             auto* LastNode = Sentinel->Prev;
             Sentinel->Prev = Node;
@@ -3317,13 +3840,24 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         }
         
         void PushNodeFront
- (node* Node)
+        (node* Node)
         {
             auto* FirstNode = Sentinel->Next;
             Sentinel->Next = Node;
             FirstNode->Prev = Node;
             Node->Next = FirstNode;
             Node->Prev = Sentinel;
+            
+            SanityCheck();
+        }
+        
+        void PushNodeBetween
+        (node* Prev, node* NewNode, node* Next)
+        {
+            NewNode->Next = Next;
+            NewNode->Prev = Prev;
+            Prev->Next = NewNode;
+            Next->Prev = NewNode;
             
             SanityCheck();
         }
@@ -3342,7 +3876,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
             if(FreeNodes)
             {
                 Node = PopFreeNode();
-                ZeroStruct(Node->Data);
+                ZeroOutStruct(Node->Data);
             }
             else
             {
@@ -3382,8 +3916,56 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
             return Node->Data;
         }
         
+        type& PushBeforeZero
+        (iterator It)
+        {
+            node* Node = AllocateZeroNode();
+            PushNodeBetween(It.Node->Prev, Node, It.Node);
+            return Node->Data;
+        }
+        
+        type& PushBeforeUninitialized
+        (iterator It)
+        {
+            node* Node = AllocateUninitializedNode();
+            PushNodeBetween(It.Node->Prev, Node, It.Node);
+            return Node->Data;
+        }
+        
+        type& PushAfterZero
+        (iterator It)
+        {
+            node* Node = AllocateZeroNode();
+            PushNodeBetween(It.Node, Node, It.Node->Next);
+            return Node->Data;
+        }
+        
+        type& PushAfterUninitialized
+        (iterator It)
+        {
+            node* Node = AllocateUninitializedNode();
+            PushNodeBetween(It.Node, Node, It.Node->Next);
+            return Node->Data;
+        }
+        
+        type& PushBetweenZero
+        (iterator A, iterator B)
+        {
+            node* Node = AllocateZeroNode();
+            PushNodeBetween(A, Node, B);
+            return Node->Data;
+        }
+        
+        type& PushBetweenUninitialized
+        (iterator A, iterator B)
+        {
+            node* Node = AllocateUninitializedNode();
+            PushNodeBetween(A, Node, B);
+            return Node->Data;
+        }
+        
         void AddFreeNode
- (node* Node)
+        (node* Node)
         {
             Node->Next = FreeNodes;
             FreeNodes = Node;
@@ -3405,7 +3987,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         }
         
         void Remove
- (node* Node)
+        (node* Node)
         {
             rstd_Assert(!Empty());
             
@@ -3417,7 +3999,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         }
         
         iterator Remove
- (iterator It)
+        (iterator It)
         {
             auto ElementToDeleteIt = It++;
             Remove(ElementToDeleteIt.Node);
@@ -3433,141 +4015,51 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         void PopLast()
         { Remove(GetLast()); }
         
-        template<class compare_type>               
-            type* FindEqual                            
- (const compare_type& ThingToComare)        
-        {                                          
-            for(auto& Element : *this)         
-            {                                      
-                if(Element == ThingToComare)               
-                    return &Element;               
-            }                                      
-            return nullptr;                        
-        }                                          
+        type* FindEqual(const auto& ThingToComare)        
+        { return ::FindEqual(*this, ThingToComare); }
         
-        template<class comparison_fn>        
-            type* Find                           
- (comparison_fn Comparison)           
-        {                                    
-            for(auto& Element : *this)       
-            {                                
-                if(Comparison(Element))      
-                    return &Element;         
-            }                                
-            return nullptr;                  
-        }                                    
+        type* Find(auto ComparisonFunc)           
+        { return ::Find(*this, ComparisonFunc); }                                    
         
-        template<class comparison_fn> 
-            auto& FindWithAssert 
- (comparison_fn Comparison) 
-        { 
-            auto* Found = Find(Comparison); 
-            rstd_Assert(Found); 
-            return *Found; 
-        } 
+        type& FindWithAssert(auto ComparisonFunc)
+        { return ::FindWithAssert(*this, ComparisonFunc); }
         
-        template<class compare_type> 
-            rstd_bool HasEqual 
- (const compare_type& ThingToCompare) 
-        { return (rstd_bool)FindEqual(ThingToCompare); } 
+        rstd_bool HasEqual(const auto& ThingToCompare) 
+        { return ::HasEqual(*this, ThingToCompare); } 
         
-        template<class comparison_fn> 
-            rstd_bool Has 
- (comparison_fn Comparison) 
-        { return (rstd_bool)Find(Comparison); } 
+        rstd_bool Has(auto ComparisonFunc) 
+        { return ::Find(*this, ComparisonFunc); }
         
-        template<class compare_type> 
-            u32 FindIndexOfFirstEqual 
- (const compare_type& ThingToCompare) 
-        { 
-            u32 ElementIndex = 0; 
-            for(auto& Element : *this) 
-            { 
-                if(Element == ThingToCompare) 
-                    return ElementIndex; 
-                ++ElementIndex; 
-            } 
-            return InvalidU32; 
-        } 
+        u32 FindIndexOfFirstEqual(const auto& ThingToCompare)
+        {  return ::FindIndexOfFirstEqual(*this, ThingToCompare); } 
         
-        template<class comparison_fn> 
-            u32 FindIndexOfFirst 
- (comparison_fn Comparison) 
-        { 
-            u32 ElementIndex = 0; 
-            for(auto& Element : *this) 
-            { 
-                if(Comparison(Element)) 
-                    return ElementIndex; 
-                ++ElementIndex; 
-            } 
-            return InvalidU32; 
-        } 
+        u32 FindIndexOfFirst(auto ComparisonFunc) 
+        { return ::FindIndexOfFirst(*this, ComparisonFunc); } 
         
-        template<class compare_type> 
-            u32 HowManyEqualHas 
- (const compare_type& ThingToCompare) 
-        { 
-            u32 Res = 0; 
-            for(auto& Element : *this) 
-            { 
-                if(Element == ThingToCompare) 
-                    ++Res; 
-            } 
-            return Res; 
-        } 
+        u32 HowManyEqualHas(const auto& ThingToCompare) 
+        { return ::HowManyEqualHas(*this, ThingToCompare); } 
         
-        template<class comparison_fn> 
-            u32 HowManyHas 
- (comparison_fn Comparison) 
-        { 
-            u32 Res = 0; 
-            for(auto& Element : *this) 
-            { 
-                if(Comparison(Element)) 
-                    ++Res; 
-            } 
-            return Res; 
-        } 
+        u32 HowManyHas(auto ComparisonFunc) 
+        { return ::HowManyHas(*this, ComparisonFunc); } 
         
-        struct get_value_and_index_result 
-        { 
-            type* Value; 
-            u32 Index; 
-            
-            operator rstd_bool() 
-            { return Value; } 
-            
-            type* operator->() 
-            { 	 
-                rstd_Assert(Value); 
-                return Value; 
-            } 
-        }; 
-        
-        template<class comparison_fn> 
-            get_value_and_index_result FindValueAndIndex 
- (comparison_fn Comparison) 
-        { 
-            get_value_and_index_result Res = {}; 
-            for(auto& E : *this) 
-            { 
-                if(Comparison(E)) 
-                { 
-                    Res.Value = &E; 
-                    break; 
-                } 
-                ++Res.Index; 
-            } 
-            return Res; 
-        }
+        get_value_and_index_result<type> FindValueAndIndex 
+        (auto ComparisonFunc) 
+        { return ::FindValueAndIndex<type>(*this, ComparisonFunc); }
         
         type& Push 
- (const type& InitialData) 
+        (const type& InitialData) 
         { 
             auto& Data = PushUninitialized(); 
             Data = InitialData; 
             return Data; 
+        } 
+        
+        type& PushBefore
+        (iterator It, const type& InitialData) 
+        { 
+            auto& Data = PushBeforeUninitialized(It); 
+            Data = InitialData; 
+            return Data;
         } 
         
         type& PushDefault() 
@@ -3577,13 +4069,13 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         } 
         
         type* PushIfNotFull 
- (const type& InitialData) 
+        (const type& InitialData) 
         { 
             return &Push(InitialData); 
         } 
         
         type* PushIfUnique 
- (const type& InitialData) 
+        (const type& InitialData) 
         { 
             if(!HasEqual(InitialData)) 
                 return &Push(InitialData); 
@@ -3592,7 +4084,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         
         template<class comparison_fn> 
             type* PushIfUnique
- (const type& InitialData, comparison_fn Comparison) 
+        (const type& InitialData, comparison_fn Comparison) 
         { 
             if(!Has(Comparison)) 
                 return &Push(InitialData); 
@@ -3600,24 +4092,22 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         } 
         
         type& GetIfExistsOrPushIfUnique 
- (const type& ThingToCompareOrInitialData) 
+        (const type& ThingToCompareOrInitialData) 
         { 
             if(auto* Found = Find(ThingToCompareOrInitialData)) 
                 return *Found; 
             return Push(ThingToCompareOrInitialData); 
         } 
         
-        /* TODO(now): Do args need to be templated? */ 
-        template<class... args> 
-            void Push 
- (const type& CurrentPushElement, const args&&... NextPushElements) 
+        template<class... args> void Push 
+        (const type& CurrentPushElement, const args&&... NextPushElements) 
         { 
             Push(CurrentPushElement); 
             Push(NextPushElements...); 
         }
         
         type& PushFront 
- (const type& InitialData) 
+        (const type& InitialData) 
         { 
             auto& Data = PushFrontUninitialized(); 
             Data = InitialData; 
@@ -3626,7 +4116,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         
         template<class comparison_fn> 
             type* PushFrontIfUnique 
- (const type& InitialData, comparison_fn Comparison) 
+        (const type& InitialData, comparison_fn Comparison) 
         { 
             if(!Has(Comparison)) 
                 return &PushFront(InitialData); 
@@ -3635,7 +4125,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         
         template<class compare_type> 
             rstd_bool RemoveFirstEqualTo 
- (const compare_type& ThingToCompare) 
+        (const compare_type& ThingToCompare) 
         { 
             if(auto* Found = FindEqual(ThingToCompare)) 
             { 
@@ -3647,7 +4137,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         
         template<class compare_type> 
             void RemoveFirstEqualToWithAssert 
- (const compare_type& ThingToCompare) 
+        (const compare_type& ThingToCompare) 
         { 
             bool ManagedToRemove = RemoveFirstEqualTo(ThingToCompare); 
             rstd_Assert(ManagedToRemove); 
@@ -3655,7 +4145,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         
         template<class comparison_fn> 
             rstd_bool RemoveFirstIf 
- (comparison_fn Comparison) 
+        (comparison_fn Comparison) 
         { 
             if(auto* Found = Find(Comparison)) 
             { 
@@ -3667,7 +4157,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         
         template<class comparison_fn> 
             void RemoveFirstIfWithAssert 
- (comparison_fn Comparison) 
+        (comparison_fn Comparison) 
         { 
             bool ManagedToRemove = RemoveFirstIf(Comparison); 
             rstd_Assert(ManagedToRemove); 
@@ -3675,7 +4165,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         
         template<class comparison_fn> 
             optional<type> RemoveFirstIfReturnCopy 
- (comparison_fn Comparison) 
+        (comparison_fn Comparison) 
         { 
             if(auto* Found = Find(Comparison)) 
             { 
@@ -3687,7 +4177,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         
         template<class comparison_fn> 
             u32 RemoveIf 
- (comparison_fn Comparison) 
+        (comparison_fn Comparison) 
         { 
             u32 RemovedCount = 0; 
             for(auto It = Begin(); It != End(); ++It) 
@@ -3773,10 +4263,14 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         
     };
     
-    // TODO: Add memory debugging for singly_linked_list
+    ////////////////////////
+    // SINGLY LINKED LIST //
+    ////////////////////////
     template<class type>
         struct singly_linked_list
     {
+        // TODO: Add memory debugging for singly_linked_list
+        
         struct node
         {
             type Data;
@@ -3820,12 +4314,15 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         node* LastNode;
         arena_ref ArenaRef;
         
+        type GetVariableOfElementType()
+        { return FirstNode->Data; }
+        
         void Clear()
         { FirstNode = LastNode = nullptr; }
         
         void Init
- (arena_ref ArenaRef)
-        {	
+        (arena_ref ArenaRef)
+        {    
             rstd_AssertM(!this->ArenaRef, "It's already initialized!");
             this->ArenaRef = ArenaRef;
             Clear();
@@ -3872,9 +4369,9 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         }
         
 #ifndef rstd_DisableWarningForUsingGetCountInListsWithoutCounter
- [[deprecated("\nConsider using singly_linked_list_with_counter instead of singly_linked_list\n"
-              "if you want to call GetCount(); in most cases that will result in better performance.\n"
-              "If you want to get rid of this warning you can #define rstd_DisableWarningForUsingGetCountInListsWithoutCounter.")]]
+        [[deprecated("\nConsider using singly_linked_list_with_counter instead of singly_linked_list\n"
+                     "if you want to call GetCount(); in most cases that will result in better performance.\n"
+                     "If you want to get rid of this warning you can #define rstd_DisableWarningForUsingGetCountInListsWithoutCounter.")]]
 #endif
         u32 GetCount()
         { 
@@ -3885,7 +4382,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         }
         
         void PushNode
- (node& Node)
+        (node& Node)
         {
             if(LastNode)
                 LastNode->Next = &Node;
@@ -3895,7 +4392,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         }
         
         void PushNodeFront
- (node& Node)
+        (node& Node)
         {
             Node.Next = FirstNode;
             FirstNode = Node;
@@ -3937,7 +4434,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         }
         
         type& PushAfter
- (node* NodeWhichWillBeBeforeThePushedOne)
+        (node* NodeWhichWillBeBeforeThePushedOne)
         {
             rstd_Assert(ArenaRef);
             auto* PushedNode = PushStructUninitialized(ArenaRef.Ptr(), node);
@@ -3949,7 +4446,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         }
         
         type& PushAfter
- (node* NodeWhichWillBeBeforeThePushedOne, const type& InitialData)
+        (node* NodeWhichWillBeBeforeThePushedOne, const type& InitialData)
         {
             auto& Data = PushAfter(NodeWhichWillBeBeforeThePushedOne);
             Data = InitialData;
@@ -3970,7 +4467,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
                 auto* Node = FirstNode;
                 while(Node->Next != LastNode)
                     ++Node;
-                Node->Next = nullptr;	
+                Node->Next = nullptr;    
                 LastNode = Node;
             }
             else
@@ -3980,9 +4477,9 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         }
         
         void Remove
- (type* ElementToRemove)
+        (type* ElementToRemove)
         {
-            node* NodeToRemove = (node*)ElementToRemove;	
+            node* NodeToRemove = (node*)ElementToRemove;    
             
             if(NodeToRemove == FirstNode)
             {
@@ -4007,7 +4504,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         // NOTE: returns true if found element to remove
         template<class comparison_fn>
             rstd_bool RemoveFirstIf
- (comparison_fn Comparison)
+        (comparison_fn Comparison)
         {
             node* PrevNode = nullptr;
             for(auto* Node = FirstNode; Node; Node = Node->Next)
@@ -4016,7 +4513,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
                 {
                     if(PrevNode)
                     {
-                        PrevNode->Next = Node->Next;	
+                        PrevNode->Next = Node->Next;    
                         if(Node == LastNode)
                             LastNode = PrevNode;
                     }
@@ -4036,7 +4533,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         
         template<class comparison_fn>
             optional<type> RemoveFirstIfReturnCopy
- (comparison_fn Comparison)
+        (comparison_fn Comparison)
         {
             node* PrevNode = nullptr;
             for(auto* Node = FirstNode; Node; Node = Node->Next)
@@ -4045,7 +4542,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
                 {
                     if(PrevNode)
                     {
-                        PrevNode->Next = Node->Next;	
+                        PrevNode->Next = Node->Next;    
                         if(Node == LastNode)
                             LastNode = PrevNode;
                     }
@@ -4064,7 +4561,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         }
         
         rstd_bool RemoveFirstEqualTo
- (type& E)
+        (type& E)
         {
             node* PrevNode = nullptr;
             for(auto* Node = FirstNode; Node; Node = Node->Next)
@@ -4073,7 +4570,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
                 {
                     if(PrevNode)
                     {
-                        PrevNode->Next = Node->Next;	
+                        PrevNode->Next = Node->Next;    
                         if(Node == LastNode)
                             LastNode = PrevNode;
                     }
@@ -4091,137 +4588,39 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
             return false;
         }
         
-        template<class compare_type>               
-            type* FindEqual                            
- (const compare_type& ThingToComare)        
-        {                                          
-            for(auto& Element : *this)         
-            {                                      
-                if(Element == ThingToComare)               
-                    return &Element;               
-            }                                      
-            return nullptr;                        
-        }                                          
+        type* FindEqual(const auto& ThingToComare)        
+        { return ::FindEqual(*this, ThingToComare); }
         
-        template<class comparison_fn>        
-            type* Find                           
- (comparison_fn Comparison)           
-        {                                    
-            for(auto& Element : *this)       
-            {                                
-                if(Comparison(Element))      
-                    return &Element;         
-            }                                
-            return nullptr;                  
-        }                                    
+        type* Find(auto ComparisonFunc)           
+        { return ::Find(*this, ComparisonFunc); }                                    
         
-        template<class comparison_fn> 
-            auto& FindWithAssert 
- (comparison_fn Comparison) 
-        { 
-            auto* Found = Find(Comparison); 
-            rstd_Assert(Found); 
-            return *Found; 
-        } 
+        type& FindWithAssert(auto ComparisonFunc)
+        { return ::FindWithAssert(*this, ComparisonFunc); }
         
-        template<class compare_type> 
-            rstd_bool HasEqual 
- (const compare_type& ThingToCompare) 
-        { return (rstd_bool)FindEqual(ThingToCompare); } 
+        rstd_bool HasEqual(const auto& ThingToCompare) 
+        { return ::HasEqual(*this, ThingToCompare); } 
         
-        template<class comparison_fn> 
-            rstd_bool Has 
- (comparison_fn Comparison) 
-        { return (rstd_bool)Find(Comparison); } 
+        rstd_bool Has(auto ComparisonFunc) 
+        { return ::Find(ComparisonFunc); }
         
-        template<class compare_type> 
-            u32 FindIndexOfFirstEqual 
- (const compare_type& ThingToCompare) 
-        { 
-            u32 ElementIndex = 0; 
-            for(auto& Element : *this) 
-            { 
-                if(Element == ThingToCompare) 
-                    return ElementIndex; 
-                ++ElementIndex; 
-            } 
-            return InvalidU32; 
-        } 
+        u32 FindIndexOfFirstEqual(const auto& ThingToCompare)
+        {  return ::FindIndexOfFirstEqual(*this, ThingToCompare); } 
         
-        template<class comparison_fn> 
-            u32 FindIndexOfFirst 
- (comparison_fn Comparison) 
-        { 
-            u32 ElementIndex = 0; 
-            for(auto& Element : *this) 
-            { 
-                if(Comparison(Element)) 
-                    return ElementIndex; 
-                ++ElementIndex; 
-            } 
-            return InvalidU32; 
-        } 
+        u32 FindIndexOfFirst(auto ComparisonFunc) 
+        { return ::FindIndexOfFirst(*this, ComparisonFunc); } 
         
-        template<class compare_type> 
-            u32 HowManyEqualHas 
- (const compare_type& ThingToCompare) 
-        { 
-            u32 Res = 0; 
-            for(auto& Element : *this) 
-            { 
-                if(Element == ThingToCompare) 
-                    ++Res; 
-            } 
-            return Res; 
-        } 
+        u32 HowManyEqualHas(const auto& ThingToCompare) 
+        { return ::HowManyEqualHas(*this, ThingToCompare); } 
         
-        template<class comparison_fn> 
-            u32 HowManyHas 
- (comparison_fn Comparison) 
-        { 
-            u32 Res = 0; 
-            for(auto& Element : *this) 
-            { 
-                if(Comparison(Element)) 
-                    ++Res; 
-            } 
-            return Res; 
-        } 
+        u32 HowManyHas(auto ComparisonFunc) 
+        { return ::HowManyHas(*this, ComparisonFunc); } 
         
-        struct get_value_and_index_result 
-        { 
-            type* Value; 
-            u32 Index; 
-            
-            operator rstd_bool() 
-            { return Value; } 
-            
-            type* operator->() 
-            { 	 
-                rstd_Assert(Value); 
-                return Value; 
-            } 
-        }; 
-        
-        template<class comparison_fn> 
-            get_value_and_index_result FindValueAndIndex 
- (comparison_fn Comparison) 
-        { 
-            get_value_and_index_result Res = {}; 
-            for(auto& E : *this) 
-            { 
-                if(Comparison(E)) 
-                { 
-                    Res.Value = &E; 
-                    break; 
-                } 
-                ++Res.Index; 
-            } 
-            return Res; 
-        }
+        get_value_and_index_result<type> FindValueAndIndex 
+        (auto ComparisonFunc) 
+        { return ::FindValueAndIndex<type>(*this, ComparisonFunc); }
         
         type& Push 
- (const type& InitialData)
+        (const type& InitialData)
         { 
             auto& Data = PushUninitialized(); 
             Data = InitialData; 
@@ -4235,13 +4634,13 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         } 
         
         type* PushIfNotFull 
- (const type& InitialData) 
+        (const type& InitialData) 
         { 
             return &Push(InitialData); 
         } 
         
         type* PushIfUnique 
- (const type& InitialData) 
+        (const type& InitialData) 
         { 
             if(!HasEqual(InitialData)) 
                 return &Push(InitialData); 
@@ -4250,7 +4649,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         
         template<class comparison_fn> 
             type* PushIfUnique
- (const type& InitialData, comparison_fn Comparison) 
+        (const type& InitialData, comparison_fn Comparison) 
         { 
             if(!Has(Comparison)) 
                 return &Push(InitialData); 
@@ -4258,24 +4657,22 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         } 
         
         type& GetIfExistsOrPushIfUnique 
- (const type& ThingToCompareOrInitialData) 
+        (const type& ThingToCompareOrInitialData) 
         { 
             if(auto* Found = Find(ThingToCompareOrInitialData)) 
                 return *Found; 
             return Push(ThingToCompareOrInitialData); 
         } 
         
-        /* TODO(now): Do args need to be templated? */ 
-        template<class... args> 
-            void Push 
- (const type& CurrentPushElement, const args&&... NextPushElements) 
+        template<class... args> void Push 
+        (const type& CurrentPushElement, const args&&... NextPushElements) 
         { 
             Push(CurrentPushElement); 
             Push(NextPushElements...); 
         }
         
         type& PushFront 
- (const type& InitialData) 
+        (const type& InitialData) 
         { 
             auto& Data = PushFrontUninitialized(); 
             Data = InitialData; 
@@ -4284,19 +4681,35 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         
         template<class comparison_fn> 
             type* PushFrontIfUnique 
- (const type& InitialData, comparison_fn Comparison) 
+        (const type& InitialData, comparison_fn Comparison) 
         { 
             if(!Has(Comparison)) 
                 return &PushFront(InitialData); 
             return nullptr; 
         } 
         
+        optional<type> GetValueOfIndexIfExists
+        (u32 RequestedIndex)
+        {
+            u32 I = 0;
+            for(auto* Node = FirstNode; Node; Node = Node->Next)
+            {
+                if(I == RequestedIndex)
+                    return Node->Data;
+                I++;
+            }
+            return NullOpt;
+        }
     };
     
-    // TODO: Add memory debugging for backward_singly_linked_list
+    /////////////////////////////////
+    // BACKWARD SINGLY LINKED LIST //
+    /////////////////////////////////
     template<class type>
         struct backward_singly_linked_list
     {
+        // TODO: Add memory debugging for backward_singly_linked_list
+        
         struct node
         {
             type Data;
@@ -4339,8 +4752,25 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         node* Nodes;
         arena_ref ArenaRef;
         
+        rstd_bool Initialized()
+        { return ArenaRef; }
+        
         backward_singly_linked_list(arena_ref ArenaRef) 
             :ArenaRef(ArenaRef), Nodes(nullptr) {}
+        
+        void Init
+        (arena_ref _ArenaRef)
+        {
+            ArenaRef = _ArenaRef;
+            Nodes = nullptr;
+        }
+        
+        void InitIfNotInitialized
+        (arena_ref ArenaRef)
+        {
+            if(!Initialized())
+                Init(ArenaRef);
+        }
         
 #ifdef rstd_DefaultArena
         backward_singly_linked_list()
@@ -4350,6 +4780,9 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
             :ArenaRef(), Nodes(nullptr) {}
 #endif
         
+        type GetVariableOfElementType()
+        { return Nodes->Data; }
+        
         iterator Begin()
         { return {Nodes}; }
         
@@ -4357,9 +4790,6 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         { return {nullptr}; }
         
         internal_rstd_RestOfIteratorFunctions;
-        
-        rstd_bool Initialized()
-        { return ArenaRef; }
         
         type& GetFirst()
         {
@@ -4377,7 +4807,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         }
         
         type& operator[]
- (u32 DesiredIndex)
+        (u32 DesiredIndex)
         {
             rstd_Assert(!Empty());
             
@@ -4400,9 +4830,9 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         { return !Nodes; }
         
 #ifndef rstd_DisableWarningForUsingGetCountInListsWithoutCounter
- [[deprecated("\nConsider using backward_singly_linked_list_with_counter instead of backward_singly_linked_list\n"
-              "if you want to call GetCount(); in most cases that will result in better performance.\n"
-              "If you want to get rid of this warning you can #define rstd_DisableWarningForUsingGetCountInListsWithoutCounter.")]]
+        [[deprecated("\nConsider using backward_singly_linked_list_with_counter instead of backward_singly_linked_list\n"
+                     "if you want to call GetCount(); in most cases that will result in better performance.\n"
+                     "If you want to get rid of this warning you can #define rstd_DisableWarningForUsingGetCountInListsWithoutCounter.")]]
 #endif
         u32 GetCount()
         { 
@@ -4413,7 +4843,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         }
         
         void PushNode
- (node& Node)
+        (node& Node)
         {
             Node.Next = Nodes;
             Nodes = &Node;
@@ -4436,7 +4866,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         }
         
         type& PushAfter
- (node& NodeWhichWillBeBeforeThePushedOne, const type& InitialData)
+        (node& NodeWhichWillBeBeforeThePushedOne, const type& InitialData)
         {
             rstd_Assert(ArenaRef);
             auto& PushedNode = rstd_PushStructUninitialized(*ArenaRef, node);
@@ -4470,9 +4900,9 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         { return &PopLastNode()->Data; }
         
         void Remove
- (type* ElementToRemove)
+        (type* ElementToRemove)
         {
-            node* NodeToRemove = (node*)ElementToRemove;	
+            node* NodeToRemove = (node*)ElementToRemove;    
             
             if(NodeToRemove == Nodes)
             {
@@ -4497,7 +4927,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         // NOTE: returns true if found element to remove
         template<class comparison_fn>
             rstd_bool RemoveFirstIf
- (comparison_fn Comparison)
+        (comparison_fn Comparison)
         {
             node* PrevNode = nullptr;
             for(auto* Node = Nodes; Node; Node = Node->Next)
@@ -4505,7 +4935,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
                 if(Comparison(Node->Data))
                 {
                     if(PrevNode)
-                        PrevNode->Next = Node->Next;	
+                        PrevNode->Next = Node->Next;    
                     else
                         Nodes = Node->Next;
                     return true;
@@ -4520,15 +4950,15 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         
         template<class comparison_fn>
             void RemoveFirstIfWithAssert
- (comparison_fn Comparison)
+        (comparison_fn Comparison)
         {
-            rstd_bool ManagedToRemove = RemoveFirstIf(Comparison);	
+            rstd_bool ManagedToRemove = RemoveFirstIf(Comparison);    
             rstd_AssertM(ManagedToRemove, "Element which meets the condition of removal wasn't found!");
         }
         
         template<class comparison_fn>
             optional<type> RemoveFirstIfReturnCopy
- (comparison_fn Comparison)
+        (comparison_fn Comparison)
         {
             node* PrevNode = nullptr;
             for(auto* Node = Nodes; Node; Node = Node->Next)
@@ -4536,7 +4966,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
                 if(Comparison(Node->Data))
                 {
                     if(PrevNode)
-                        PrevNode->Next = Node->Next;	
+                        PrevNode->Next = Node->Next;    
                     else
                         Nodes = Node->Next;
                     return {Node->Data};
@@ -4551,7 +4981,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         
         template<class comparison_fn>
             type RemoveFirstIfWithAssertReturnCopy
- (comparison_fn Comparison)
+        (comparison_fn Comparison)
         {
             node* PrevNode = nullptr;
             for(auto* Node = Nodes; Node; Node = Node->Next)
@@ -4559,7 +4989,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
                 if(Comparison(Node->Data))
                 {
                     if(PrevNode)
-                        PrevNode->Next = Node->Next;	
+                        PrevNode->Next = Node->Next;    
                     else
                         Nodes = Node->Next;
                     return Node->Data;
@@ -4574,7 +5004,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         }
         
         rstd_bool RemoveFirstEqualTo
- (type& E)
+        (type& E)
         {
             node* PrevNode = nullptr;
             for(auto* Node = Nodes; Node; Node = Node->Next)
@@ -4582,7 +5012,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
                 if(Node->Data == E)
                 {
                     if(PrevNode)
-                        PrevNode->Next = Node->Next;	
+                        PrevNode->Next = Node->Next;    
                     else
                         Nodes = Node->Next;
                     return true;
@@ -4595,137 +5025,39 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
             return false;
         }
         
-        template<class compare_type>               
-            type* FindEqual                            
- (const compare_type& ThingToComare)        
-        {                                          
-            for(auto& Element : *this)         
-            {                                      
-                if(Element == ThingToComare)               
-                    return &Element;               
-            }                                      
-            return nullptr;                        
-        }                                          
+        type* FindEqual(const auto& ThingToComare)        
+        { return ::FindEqual(*this, ThingToComare); }
         
-        template<class comparison_fn>        
-            type* Find                           
- (comparison_fn Comparison)           
-        {                                    
-            for(auto& Element : *this)       
-            {                                
-                if(Comparison(Element))      
-                    return &Element;         
-            }                                
-            return nullptr;                  
-        }                                    
+        type* Find(auto ComparisonFunc)           
+        { return ::Find(*this, ComparisonFunc); }                                    
         
-        template<class comparison_fn> 
-            auto& FindWithAssert 
- (comparison_fn Comparison) 
-        { 
-            auto* Found = Find(Comparison); 
-            rstd_Assert(Found); 
-            return *Found; 
-        } 
+        type& FindWithAssert(auto ComparisonFunc)
+        { return ::FindWithAssert(*this, ComparisonFunc); }
         
-        template<class compare_type> 
-            rstd_bool HasEqual 
- (const compare_type& ThingToCompare) 
-        { return (rstd_bool)FindEqual(ThingToCompare); } 
+        rstd_bool HasEqual(const auto& ThingToCompare) 
+        { return ::HasEqual(*this, ThingToCompare); } 
         
-        template<class comparison_fn> 
-            rstd_bool Has 
- (comparison_fn Comparison) 
-        { return (rstd_bool)Find(Comparison); } 
+        rstd_bool Has(auto ComparisonFunc) 
+        { return ::Find(*this, ComparisonFunc); }
         
-        template<class compare_type> 
-            u32 FindIndexOfFirstEqual 
- (const compare_type& ThingToCompare) 
-        { 
-            u32 ElementIndex = 0; 
-            for(auto& Element : *this) 
-            { 
-                if(Element == ThingToCompare) 
-                    return ElementIndex; 
-                ++ElementIndex; 
-            } 
-            return InvalidU32; 
-        } 
+        u32 FindIndexOfFirstEqual(const auto& ThingToCompare)
+        {  return ::FindIndexOfFirstEqual(*this, ThingToCompare); } 
         
-        template<class comparison_fn> 
-            u32 FindIndexOfFirst 
- (comparison_fn Comparison) 
-        { 
-            u32 ElementIndex = 0; 
-            for(auto& Element : *this) 
-            { 
-                if(Comparison(Element)) 
-                    return ElementIndex; 
-                ++ElementIndex; 
-            } 
-            return InvalidU32; 
-        } 
+        u32 FindIndexOfFirst(auto ComparisonFunc) 
+        { return ::FindIndexOfFirst(*this, ComparisonFunc); } 
         
-        template<class compare_type> 
-            u32 HowManyEqualHas 
- (const compare_type& ThingToCompare) 
-        { 
-            u32 Res = 0; 
-            for(auto& Element : *this) 
-            { 
-                if(Element == ThingToCompare) 
-                    ++Res; 
-            } 
-            return Res; 
-        } 
+        u32 HowManyEqualHas(const auto& ThingToCompare) 
+        { return ::HowManyEqualHas(*this, ThingToCompare); } 
         
-        template<class comparison_fn> 
-            u32 HowManyHas 
- (comparison_fn Comparison) 
-        { 
-            u32 Res = 0; 
-            for(auto& Element : *this) 
-            { 
-                if(Comparison(Element)) 
-                    ++Res; 
-            } 
-            return Res; 
-        } 
+        u32 HowManyHas(auto ComparisonFunc) 
+        { return ::HowManyHas(*this, ComparisonFunc); } 
         
-        struct get_value_and_index_result 
-        { 
-            type* Value; 
-            u32 Index; 
-            
-            operator rstd_bool() 
-            { return Value; } 
-            
-            type* operator->() 
-            { 	 
-                rstd_Assert(Value); 
-                return Value; 
-            } 
-        }; 
-        
-        template<class comparison_fn> 
-            get_value_and_index_result FindValueAndIndex 
- (comparison_fn Comparison) 
-        { 
-            get_value_and_index_result Res = {}; 
-            for(auto& E : *this) 
-            { 
-                if(Comparison(E)) 
-                { 
-                    Res.Value = &E; 
-                    break; 
-                } 
-                ++Res.Index; 
-            } 
-            return Res; 
-        }
+        get_value_and_index_result<type> FindValueAndIndex 
+        (auto ComparisonFunc) 
+        { return ::FindValueAndIndex<type>(*this, ComparisonFunc); }
         
         type& Push 
- (const type& InitialData) 
+        (const type& InitialData) 
         { 
             auto& Data = PushUninitialized(); 
             Data = InitialData; 
@@ -4739,13 +5071,13 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         } 
         
         type* PushIfNotFull 
- (const type& InitialData) 
+        (const type& InitialData) 
         { 
             return &Push(InitialData); 
         } 
         
         type* PushIfUnique 
- (const type& InitialData) 
+        (const type& InitialData) 
         { 
             if(!HasEqual(InitialData)) 
                 return &Push(InitialData); 
@@ -4754,7 +5086,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         
         template<class comparison_fn> 
             type* PushIfUnique
- (const type& InitialData, comparison_fn Comparison) 
+        (const type& InitialData, comparison_fn Comparison) 
         { 
             if(!Has(Comparison)) 
                 return &Push(InitialData); 
@@ -4762,7 +5094,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         } 
         
         type& GetIfExistsOrPushIfUnique 
- (const type& ThingToCompareOrInitialData) 
+        (const type& ThingToCompareOrInitialData) 
         { 
             if(auto* Found = Find(ThingToCompareOrInitialData)) 
                 return *Found; 
@@ -4772,13 +5104,16 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         // TODO: Do args need to be templated?
         template<class... args> 
             void Push 
- (const type& CurrentPushElement, const args&&... NextPushElements) 
+        (const type& CurrentPushElement, const args&&... NextPushElements) 
         { 
             Push(CurrentPushElement); 
             Push(NextPushElements...); 
         }
     };
     
+    /////////////////////////////////////
+    // DOUBLY LINKED LIST WITH COUNTER //
+    /////////////////////////////////////
     template<class type>
         struct doubly_linked_list_with_counter : doubly_linked_list<type>
     {
@@ -4803,6 +5138,9 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         
         using doubly_linked_list<type>::Find;
         
+        type GetVariableOfElementType()
+        { return doubly_linked_list<type>::GetVariableOfElementType(); }
+        
         void Clear()
         {
             doubly_linked_list<type>::Clear();
@@ -4810,21 +5148,21 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         }
         
         void PushNode
- (node* Node)
+        (node* Node)
         {
             ++Count;
             doubly_linked_list<type>::PushNode(Node);
         }
         
         void PushNodeFront
- (node* Node)
+        (node* Node)
         {
             ++Count;
             doubly_linked_list<type>::PushNodeFront(Node);
         }
         
         void PopFreeNode
- (node* Node)
+        (node* Node)
         {
             --Count;
             doubly_linked_list<type>::PopFreeNode(Node);
@@ -4843,7 +5181,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         }
         
         type& Push
- (const type& InitialData)
+        (const type& InitialData)
         {
             ++Count;
             return doubly_linked_list<type>::Push(InitialData);
@@ -4862,21 +5200,21 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         }
         
         type& PushFront
- (const type& InitialData)
+        (const type& InitialData)
         {
             ++Count;
             return doubly_linked_list<type>::PushFront(InitialData);
         }
         
         type* PushIfUnique
- (const type& InitialData)
+        (const type& InitialData)
         {
             ++Count;
             return doubly_linked_list<type>::PushIfUnique(InitialData);
         }
         
         type& GetIfExistsOrPushIfUnique
- (const type& E)
+        (const type& E)
         {
             auto* Found = Find(*this, E);
             if(Found)
@@ -4885,14 +5223,14 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         }
         
         void Remove
- (node* Node)
+        (node* Node)
         {
             doubly_linked_list<type>::Remove(Node);
             --Count;
         }
         
         iterator Remove
- (iterator It)
+        (iterator It)
         {
             iterator Res = doubly_linked_list<type>::Remove(It);
             --Count;
@@ -4900,7 +5238,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         }
         
         void Remove
- (type& ElementToRemove)
+        (type& ElementToRemove)
         {
             --Count;
             doubly_linked_list<type>::Remove(ElementToRemove);
@@ -4985,7 +5323,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         // NOTE: returns true if found element to remove
         template<class comparison_fn>
             rstd_bool RemoveFirstIf
- (comparison_fn Comparison)
+        (comparison_fn Comparison)
         {
             if(auto* Found = Find(Comparison))
             {
@@ -4997,7 +5335,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         
         template<class comparison_fn>
             optional<type> RemoveFirstIfReturnCopy
- (comparison_fn Comparison)
+        (comparison_fn Comparison)
         {
             if(auto* Found = Find(Comparison))
             {
@@ -5008,7 +5346,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         }
         
         rstd_bool RemoveFirstEqualTo
- (type& E)
+        (type& E)
         {
             if(auto* Found = FindEqual(E))
             {
@@ -5019,6 +5357,9 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         }
     };
     
+    /////////////////////////////////////
+    // SINGLY LINKED LIST WITH COUNTER //
+    /////////////////////////////////////
     template<class type>
         struct singly_linked_list_with_counter : singly_linked_list<type>
     {
@@ -5036,6 +5377,9 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
 #endif
         
         u32 Count;
+        
+        type GetVariableOfElementType()
+        { return singly_linked_list<type>::GetVariableOfElementType(); }
         
         u32 GetCount()
         { return Count; }
@@ -5065,7 +5409,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         }
         
         type& PushFront
- (const type& InitialData)
+        (const type& InitialData)
         {
             ++Count;
             return singly_linked_list<type>::PushFront(InitialData);
@@ -5090,28 +5434,28 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         }
         
         type& Push
- (const type& InitialData)
+        (const type& InitialData)
         {
             ++Count;
             return singly_linked_list<type>::Push(InitialData);
         }
         
         type& PushAfter
- (node* NodeWhichWillBeBeforeThePushedOne, const type& InitialData)
+        (node* NodeWhichWillBeBeforeThePushedOne, const type& InitialData)
         {
             ++Count;
             return singly_linked_list<type>::PushAfter(NodeWhichWillBeBeforeThePushedOne, InitialData);
         }
         
         type* PushIfUnique
- (const type& InitialData)
+        (const type& InitialData)
         {
             ++Count;
             return singly_linked_list<type>::PushIfUnique(InitialData);
         }
         
         type& GetIfExistsOrPushIfUnique
- (const type& E)
+        (const type& E)
         {
             auto* Found = Find(this, E);
             if(Found)
@@ -5132,7 +5476,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         }
         
         void Remove
- (type& ElementToRemove)
+        (type& ElementToRemove)
         {
             --Count;
             singly_linked_list<type>::Remove(ElementToRemove);
@@ -5140,7 +5484,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         
         template<class comparison_fn>
             rstd_bool RemoveFirstIf
- (comparison_fn Comparison)
+        (comparison_fn Comparison)
         {
             rstd_bool ManagedToRemove = singly_linked_list<type>::RemoveFirstIf(Comparison);
             if(ManagedToRemove)
@@ -5150,7 +5494,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         
         template<class comparison_fn>
             optional<type> RemoveFirstIfReturnCopy
- (comparison_fn Comparison)
+        (comparison_fn Comparison)
         {
             auto Res = singly_linked_list<type>::RemoveFirstIfReturnCopy(Comparison);
             if(Res)
@@ -5159,7 +5503,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         }
         
         rstd_bool RemoveFirstEqualTo
- (type& E)
+        (type& E)
         {
             rstd_bool ManagedToRemove = singly_linked_list<type>::RemoveFirstEqualTo(E);
             if(ManagedToRemove)
@@ -5168,6 +5512,9 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         }
     };
     
+    //////////////////////////////////////////////
+    // BACKWARD SINGLY LINKED LIST WITH COUNTER //
+    //////////////////////////////////////////////
     template<class type>
         struct backward_singly_linked_list_with_counter : backward_singly_linked_list<type>
     {
@@ -5187,6 +5534,9 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         
         u32 Count;
         
+        type GetVariableOfElementType()
+        { return backward_singly_linked_list<type>::GetVariableOfElementType(); }
+        
         u32 GetCount()
         { return Count; }
         
@@ -5197,7 +5547,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         }
         
         void PushNode
- (node& Node)
+        (node& Node)
         {
             ++Count;
             backward_singly_linked_list<type>::PushNode(Node);
@@ -5216,28 +5566,28 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         }
         
         type& Push
- (const type& InitialData)
+        (const type& InitialData)
         {
             ++Count;
             return backward_singly_linked_list<type>::Push(InitialData);
         }
         
         type& PushAfter
- (node& NodeWhichWillBeBeforeThePushedOne, const type& InitialData)
+        (node& NodeWhichWillBeBeforeThePushedOne, const type& InitialData)
         {
             ++Count;
             return backward_singly_linked_list<type>::PushAfter(NodeWhichWillBeBeforeThePushedOne, InitialData);
         }
         
         type* PushIfUnique
- (const type& InitialData)
+        (const type& InitialData)
         {
             ++Count;
             return backward_singly_linked_list<type>::PushIfUnique(InitialData);
         }
         
         type& GetIfExistsOrPushIfUnique
- (const type& E)
+        (const type& E)
         {
             auto* Found = Find(*this, E);
             if(Found)
@@ -5270,7 +5620,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         }
         
         void Remove
- (type* ElementToRemove)
+        (type* ElementToRemove)
         {
             --Count;
             backward_singly_linked_list<type>::Remove(ElementToRemove);
@@ -5278,7 +5628,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         
         template<class comparison_fn>
             rstd_bool RemoveFirstIf
- (comparison_fn Comparison)
+        (comparison_fn Comparison)
         {
             rstd_bool ManagedToRemove = backward_singly_linked_list<type>::RemoveFirstIf(Comparison);
             if(ManagedToRemove)
@@ -5288,15 +5638,15 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         
         template<class comparison_fn>
             void RemoveFirstIfWithAssert
- (comparison_fn Comparison)
+        (comparison_fn Comparison)
         {
-            backward_singly_linked_list<type>::RemoveFirstIfWithAssert(Comparison);	
+            backward_singly_linked_list<type>::RemoveFirstIfWithAssert(Comparison);    
             --Count;
         }
         
         template<class comparison_fn>
             optional<type> RemoveFirstIfReturnCopy
- (comparison_fn Comparison)
+        (comparison_fn Comparison)
         {
             auto Res = backward_singly_linked_list<type>::RemoveFirstIfReturnCopy(Comparison);
             if(Res)
@@ -5306,7 +5656,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         
         template<class comparison_fn>
             type RemoveFirstIfWithAssertReturnCopy
- (comparison_fn Comparison)
+        (comparison_fn Comparison)
         {
             auto Res = backward_singly_linked_list<type>::RemoveFirstIfWithAssertReturnCopy(Comparison);
             --Count;
@@ -5314,7 +5664,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         }
         
         rstd_bool RemoveFirstEqualTo
- (type& E)
+        (type& E)
         {
             rstd_bool ManagedToRemove = backward_singly_linked_list<type>::RemoveFirstEqualTo(E);
             if(ManagedToRemove)
@@ -5323,16 +5673,14 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
         }
     };
     
-    
     /////////////////////
     // MULTI-THREADING //
     /////////////////////
-    
 #ifdef _WIN32
     static void WriteFence()
     {
 #if rstd_MultiThreadingEnabled
-        _WriteBarrier(); _mm_sfence();
+        _WriteBarrier();
 #endif
     }
     
@@ -5350,8 +5698,11 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
 #endif
     }
     
-    u32 AtomicIncrement(volatile u32& A);
-    u32 AtomicDecrement(volatile u32& A);
+    u32 AtomicIncrement(volatile u32&);
+    u32 AtomicDecrement(volatile u32&);
+    
+    u64 AtomicIncrement(volatile u64&);
+    u64 AtomicDecrement(volatile u64&);
     
     i32 AtomicSet(volatile i32& Destination, i32 NewValue);
     
@@ -5359,10 +5710,10 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
     { return AtomicSet((volatile i32&)Destination, (i32)NewValue);}
     
     i32 AtomicCompareAndSet
- (volatile i32& Destination, i32 NewValue, i32 ValueThatShouldBeInDestination);
+    (volatile i32& Destination, i32 NewValue, i32 ValueThatShouldBeInDestination);
     
     i64 AtomicCompareAndSet
- (volatile i64& Destination, i64 NewValue, i64 ValueThatShouldBeInDestination);
+    (volatile i64& Destination, i64 NewValue, i64 ValueThatShouldBeInDestination);
     
     static u32 AtomicCompareAndSet(volatile u32& Destination, u32 NewValue, u32 ValueThatShouldBeInDestination)
     { return (u32)AtomicCompareAndSet((volatile i32&)Destination, (i32)NewValue, (i32)ValueThatShouldBeInDestination); }
@@ -5383,7 +5734,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
     { volatile i32 Locked = 0; };
     
     static void Lock
- (volatile i32& Locked)
+    (volatile i32& Locked)
     {
 #if rstd_MultiThreadingEnabled
         while(Locked || AtomicCompareAndSet(Locked, 1, 0) != 0);
@@ -5394,7 +5745,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
     { Lock(Mutex.Locked); }
     
     static rstd_bool TryLock
- (volatile i32& Locked)
+    (volatile i32& Locked)
     {
 #if rstd_MultiThreadingEnabled
         return !Locked && AtomicCompareAndSet(Locked, 1, 0) == 0;
@@ -5407,7 +5758,7 @@ InternalPushStringCopy(_Arena, _InitString, rstd_GetCallingInfo())
     { return TryLock(Mutex.Locked); }
     
     static void Unlock
- (volatile i32& Locked)
+    (volatile i32& Locked)
     {
 #if rstd_MultiThreadingEnabled
         Locked = 0;
@@ -5432,7 +5783,7 @@ rstd_defer(rstd::Unlock(_Mutex)); \
     };
     
     struct thread_pool_job_node : thread_pool_job
-    { thread_pool_job* Next; };
+    { thread_pool_job_node* Next; };
     
     struct thread_pool_job_list
     {
@@ -5446,7 +5797,7 @@ rstd_defer(rstd::Unlock(_Mutex)); \
     struct thread_pool
     {
         thread_pool_job_list JobList;
-        u32 RunningJobCount;
+        volatile u32 RunningJobCount;
         void* SemaphoreHandle;
         u32 ThreadCount;
     };
@@ -5454,6 +5805,7 @@ rstd_defer(rstd::Unlock(_Mutex)); \
     void Init(thread_pool& Pool, u32 ThreadCount, arena ArenaResponsibleOnlyForAllocatingJobs);
     void PushJob(thread_pool&, void* JobUserData, thread_pool_job_callback* JobCallback);
     template<class job_container> void PushJobs(thread_pool& Pool, job_container Jobs);
+    
     
     ///////////
     // FILES // 
@@ -5513,6 +5865,9 @@ rstd_defer(rstd::Unlock(_Mutex)); \
     rstd_bool DeleteDirectory(wchar_t* Path);
     rstd_bool DeleteDirectoryWithAllContents(const char* Path);
     
+    static void SetPosToEndOfFile(file_stream& Stream)
+    { Stream.Pos = GetFileSize(Stream.File); }
+    
     static backward_singly_linked_list_with_counter<file_info> GetFileInfos(arena& Arena, const rstd_stringlike& DirectoryPath)
     { return GetFileInfos(Arena, DirectoryPath.GetCString()); }
     
@@ -5558,7 +5913,7 @@ rstd_defer(rstd::Unlock(_Mutex)); \
     { return DeleteDirectoryWithAllContents(Path.GetCString()); }
     
     static void CreateFile
- (const char* FilePath)
+    (const char* FilePath)
     {
         auto File = OpenFile(FilePath, io_mode::Write);
         Close(File);
@@ -5568,7 +5923,7 @@ rstd_defer(rstd::Unlock(_Mutex)); \
     { CreateFile(FilePath.GetCString()); }
     
     static char* GetRelativePath
- (char* FilePath, const char* RootDirectory)
+    (char* FilePath, const char* RootDirectory)
     {
         char* C = FilePath;
         while(*C)
@@ -5590,7 +5945,7 @@ rstd_defer(rstd::Unlock(_Mutex)); \
     { return GetRelativePath(FilePath.GetCString(), RootDirectory.GetCString()); }
     
     static file_stream OpenFileStream
- (const char* FilePath, io_mode Mode)
+    (const char* FilePath, io_mode Mode)
     {
         auto File = OpenFile(FilePath, Mode);
         if(Mode == io_mode::Write)
@@ -5607,16 +5962,22 @@ rstd_defer(rstd::Unlock(_Mutex)); \
     template<class type> static u32 WriteStruct(file File, u64 Pos, type& Data, u32 Count = 1)
     { return Write(File, Pos, (void*)&Data, (u32)sizeof(type) * Count); }
     
-    // TODO: Should I translate \n to \r\n here on windows???
     template<class... args> static u32 WriteString
- (file File, u64 Pos, const char* Fmt, args... Args)
+    (file File, u64 Pos, const char* Fmt, args... Args)
     {
+        // TODO: Probably we should let the user change the size of the string (sometimes 1024 characters might not be enough)
         auto String = Format<string<1024>>(Fmt, Args...);
         return Write(File, Pos, (void*)String.GetCString(), (u32)String.GetCount());
     }
     
+    static u32 WriteString(file File, u64 Pos, const rstd_stringlike& String)
+    { return Write(File, Pos, (void*)String.GetCString(), (u32)(String.GetCount() * sizeof(*String.GetCString()))); }
+    
+    static u32 WriteString(file File, u64 Pos, const char* String)
+    { return Write(File, Pos, (void*)String, (u32)strlen(String)); }
+    
     template<class type> static type Read
- (file File, u64 Pos)
+    (file File, u64 Pos)
     {
         type Res;
         Read((void*)&Res, File, Pos, (u32)sizeof(Res));
@@ -5624,7 +5985,7 @@ rstd_defer(rstd::Unlock(_Mutex)); \
     }
     
     static u32 Write
- (file_stream& Stream, void* Data, u32 Size)
+    (file_stream& Stream, void* Data, u32 Size)
     {
         u32 WrittenBytes = Write(Stream.File, Stream.Pos, Data, Size);
         rstd_Assert(WrittenBytes == Size);
@@ -5636,15 +5997,31 @@ rstd_defer(rstd::Unlock(_Mutex)); \
     { return Write(Stream, &Data, (u32)sizeof(type) * Count); }
     
     template<class... args> static u32 WriteString
- (file_stream& Stream, const char* Fmt, args... Args)
+    (file_stream& Stream, const char* Fmt, args... Args)
     {
         u32 WrittenBytes = WriteString(Stream.File, Stream.Pos, Fmt, Args...);
         Stream.Pos += WrittenBytes;
         return WrittenBytes;
     }
     
+    static u32 WriteString
+    (file_stream& Stream, const rstd_stringlike& String)
+    { 
+        u32 WrittenBytes = WriteString(Stream.File, Stream.Pos, String); 
+        Stream.Pos += WrittenBytes;
+        return WrittenBytes;
+    }
+    
+    static u32 WriteString
+    (file_stream& Stream, const char* String)
+    { 
+        u32 WrittenBytes = WriteString(Stream.File, Stream.Pos, String); 
+        Stream.Pos += WrittenBytes;
+        return WrittenBytes;
+    }
+    
     static u32 Read
- (void* Dest, file_stream& Stream, u32 Size)
+    (void* Dest, file_stream& Stream, u32 Size)
     {
         u32 ReadBytes = Read(Dest, Stream.File, Stream.Pos, Size);
         rstd_Assert(ReadBytes == Size); // TODO: Should this assertion be here? Maybe there should be second function which just returns failure?
@@ -5653,7 +6030,7 @@ rstd_defer(rstd::Unlock(_Mutex)); \
     }
     
     template<class type> static type Read
- (file_stream& Stream)
+    (file_stream& Stream)
     {
         auto Res = Read<type>(Stream.File, Stream.Pos);
         Stream.Pos += sizeof(Res);
@@ -5661,7 +6038,7 @@ rstd_defer(rstd::Unlock(_Mutex)); \
     }
     
     template<class type> static type& GetAndAdvance
- (char** DataPtr)
+    (char** DataPtr)
     {
         auto& Res = *(type*)(*DataPtr);
         *DataPtr += sizeof(type);
@@ -5700,7 +6077,7 @@ namespace rstd
     { MessageBoxA(0, Message, "Error!", MB_ICONERROR|MB_OK); }
     
     void ShowErrorMessageBoxAndExitProcess
- (const char* Message)
+    (const char* Message)
     {
         ShowErrorMessageBox(Message);
         ExitProcess(0);
@@ -5716,21 +6093,28 @@ namespace rstd
     void PageFree(void* Memory)
     { VirtualFree(Memory, 0, MEM_RELEASE); }
     
-#ifdef rstd_ThreadPoolLogging
-#if rstd_ThreadPoolLogging
-#define ThreadPoolLog(_Str) InternalPrintInDebugger(_Str)
-#else
-#define ThreadPoolLog(_Str)
-#endif
-#else
-#define ThreadPoolLog(_Str)
-#endif
-    
     /////////////////////
     // MULTI-THREADING //
     /////////////////////
+#ifdef rstd_ThreadPoolLogging
+#if rstd_ThreadPoolLogging
+    namespace ThreadPoolLogging
+    {
+        map<u32, char, 64> ThreadLetterMap;
+        char NextLetter = 'A';
+    }
+    
+#define ThreadPoolLog(_Str, ...) InternalPrintInDebugger(Format(_Str, __VA_ARGS__).GetCString())
+    
+#else
+#define ThreadPoolLog(_Str, ...)
+#endif
+#else
+#define ThreadPoolLog(_Str, ...)
+#endif
+    
     u32 AtomicIncrement
- (volatile u32& A)
+    (volatile u32& A)
     {
 #if rstd_MultiThreadingEnabled
         return InterlockedIncrement(&A);
@@ -5740,7 +6124,7 @@ namespace rstd
     }
     
     u32 AtomicDecrement
- (volatile u32& A)
+    (volatile u32& A)
     {
 #if rstd_MultiThreadingEnabled
         return InterlockedDecrement(&A);
@@ -5749,8 +6133,28 @@ namespace rstd
 #endif
     }
     
+    u64 AtomicIncrement
+    (volatile u64& A)
+    {
+#if rstd_MultiThreadingEnabled
+        return InterlockedIncrement64((LONG64*)&A);
+#else
+        return ++A;
+#endif
+    }
+    
+    u64 AtomicDecrement
+    (volatile u64& A)
+    {
+#if rstd_MultiThreadingEnabled
+        return InterlockedDecrement64((LONG64*)&A);
+#else
+        return --A;
+#endif
+    }
+    
     i32 AtomicSet
- (volatile i32& Destination, i32 NewValue)
+    (volatile i32& Destination, i32 NewValue)
     {
 #if rstd_MultiThreadingEnabled
         i32 InitialValueInDestination = InterlockedExchange((LONG*)&Destination, NewValue);
@@ -5762,7 +6166,7 @@ namespace rstd
     }
     
     i32 AtomicCompareAndSet
- (volatile i32& Destination, i32 NewValue, i32 ValueThatShouldBeInDestination)
+    (volatile i32& Destination, i32 NewValue, i32 ValueThatShouldBeInDestination)
     {
 #if rstd_MultiThreadingEnabled
         i32 ValueThatReallyIsInDestination = InterlockedCompareExchange((volatile LONG*)&Destination,
@@ -5775,7 +6179,7 @@ namespace rstd
     }
     
     i64 AtomicCompareAndSet
- (volatile i64& Destination, i64 NewValue, i64 ValueThatShouldBeInDestination)
+    (volatile i64& Destination, i64 NewValue, i64 ValueThatShouldBeInDestination)
     {
 #if rstd_MultiThreadingEnabled
         i64 ValueThatReallyIsInDestination = InterlockedCompareExchange64(&Destination, NewValue, ValueThatShouldBeInDestination);
@@ -5788,59 +6192,59 @@ namespace rstd
     
 #if rstd_MultiThreadingEnabled
     thread_pool_job* PopJob
- (thread_pool_job_list& List)
+    (thread_pool_job_list& List)
     {
         rstd_Assert(List.Mutex.Locked);
         auto* JobToDo = List.NextJobToTake;
         if(List.NextJobToTake == List.LastJobToTake)
             List.NextJobToTake = List.LastJobToTake = nullptr;
         else
-            List.NextJobToTake = List.LastJobToTake;
+            List.NextJobToTake = List.NextJobToTake->Next;
         return JobToDo;
     }
 #endif
     
 #if rstd_MultiThreadingEnabled
     DWORD WINAPI ThreadProc
- (LPVOID ThreadPoolVoidPtr)
+    (LPVOID ThreadPoolVoidPtr)
     {
 #if rstd_ThreadPoolLogging
         u32 ThreadId = GetThreadID();
+        char ThreadLetter = ThreadPoolLogging::ThreadLetterMap.FindEqualValueWithAssert(ThreadId);
 #endif
-        ThreadPoolLog(Format("Thread % starts\n", ThreadId));
+        ThreadPoolLog("Thread % starts\n", ThreadId);
         
         thread_pool& ThreadPool = *(thread_pool*)ThreadPoolVoidPtr;
         auto& List = ThreadPool.JobList;
         for(;;)
         {
-            ThreadPoolLog(Format("Thread % at the begining of loop\n", ThreadId));
+            ThreadPoolLog("Thread % at the begining of loop\n", ThreadLetter);
             while(List.NextJobToTake)
             {
                 if(TryLock(List.Mutex))
                 {
-                    ThreadPoolLog(Format("Mutex is locked by thread: %\n", ThreadId));
-                    ThreadPoolLog(Format("Thread % took the job\n", ThreadId));
+                    ThreadPoolLog("Mutex is locked by thread: %\n", ThreadLetter);
                     
                     auto* CurrentJob = PopJob(List);
                     
                     AtomicIncrement(ThreadPool.RunningJobCount);
                     Unlock(List.Mutex);
-                    ThreadPoolLog(Format("Mutex is unlocked by thread: %\n", ThreadId));
+                    ThreadPoolLog("Mutex is unlocked by thread: %\n", ThreadLetter);
                     
-                    ThreadPoolLog(Format("Thread % About to call Callback\n", ThreadId));
+                    ThreadPoolLog("Thread % About to call Callback\n", ThreadLetter);
                     CurrentJob->Callback(CurrentJob->CallbackUserData);
                     AtomicDecrement(ThreadPool.RunningJobCount);
                 }
             }
-            ThreadPoolLog(Format("Thread % going to sleep\n", ThreadId));
+            ThreadPoolLog("Thread % going to sleep\n", ThreadLetter);
             WaitForSingleObjectEx(ThreadPool.SemaphoreHandle, INFINITE, FALSE);
-            ThreadPoolLog(Format("Thread % awakes\n", ThreadId));
+            ThreadPoolLog("Thread % awakes\n", ThreadLetter);
         }
     }
 #endif
     
     void Init
- (thread_pool& Pool, u32 ThreadCount, arena Arena)
+    (thread_pool& Pool, u32 ThreadCount, arena Arena)
     {
 #if rstd_MultiThreadingEnabled
         Pool = {};
@@ -5853,13 +6257,18 @@ namespace rstd
         {
             DWORD ThreadId;
             auto ThreadHandle = CreateThread(0, 0, ThreadProc, &Pool, 0, &ThreadId);
+            
+#if rstd_ThreadPoolLogging
+            ThreadPoolLogging::ThreadLetterMap.Push(ThreadId, ThreadPoolLogging::NextLetter++);
+#endif
+            
             CloseHandle(ThreadHandle); // TODO: Support changing number of threads in runtime?
         }
 #endif
     }
     
     void PushJob
- (thread_pool& Pool, void* JobUserData, thread_pool_job_callback* JobCallback)
+    (thread_pool& Pool, void* JobUserData, thread_pool_job_callback* JobCallback)
     {
 #if rstd_MultiThreadingEnabled
         auto& List = Pool.JobList;
@@ -5882,7 +6291,7 @@ namespace rstd
         ThreadPoolLog("Mutex is unlocked by PushJob\n");
         
         ReleaseSemaphore(Pool.SemaphoreHandle, 1, 0);
-        ThreadPoolLog("Thread should be awoken now\n");
+        ThreadPoolLog("Thread should be awaken now\n");
 #else
         JobCallback(JobUserData);
 #endif
@@ -5890,7 +6299,7 @@ namespace rstd
     
     template<class job_container>
         void PushJobs
- (thread_pool& Pool, job_container Jobs)
+    (thread_pool& Pool, job_container Jobs)
     {
 #if rstd_MultiThreadingEnabled
         auto& List = Pool.JobList;
@@ -5919,11 +6328,11 @@ namespace rstd
         
         u32 ThreadsToAwakeCount = PushedJobCount > Pool.ThreadCount ? Pool.ThreadCount : PushedJobCount;
         LONG WorkingThreadCount = 0;
-        ThreadPoolLog(Format("ReleaseSemaphore 1 - ThreadsToAwakeCount: %\n", ThreadsToAwakeCount));
+        ThreadPoolLog("ReleaseSemaphore 1 - ThreadsToAwakeCount: %\n", ThreadsToAwakeCount);
         if(!ReleaseSemaphore(Pool.SemaphoreHandle, ThreadsToAwakeCount, &WorkingThreadCount))
         {
             ThreadsToAwakeCount = Pool.ThreadCount - WorkingThreadCount;
-            ThreadPoolLog(Format("ReleaseSemaphore 2 - ThreadsToAwakeCount: %, WorkingThreadCount: %\n", ThreadsToAwakeCount, WorkingThreadCount));
+            ThreadPoolLog("ReleaseSemaphore 2 - ThreadsToAwakeCount: %, WorkingThreadCount: %\n", ThreadsToAwakeCount, WorkingThreadCount);
             ReleaseSemaphore(Pool.SemaphoreHandle, ThreadsToAwakeCount, nullptr);
         }
 #else
@@ -5933,7 +6342,7 @@ namespace rstd
     }
     
     void CompleteAllJobs
- (thread_pool& Pool)
+    (thread_pool& Pool)
     {
 #if rstd_MultiThreadingEnabled
         auto& List = Pool.JobList;
@@ -5968,18 +6377,18 @@ namespace rstd
         { OpenFiles = {OwnArena(rstd_AllocateArenaZero(MegabytesToBytes(1)))}; }
         
         void OnOpenFile
- (const char* FilePath, void* PlatformFileHandle)
+        (const char* FilePath, void* PlatformFileHandle)
         {
             rstd_ScopeLock(Mutex);
             OpenFiles.Push({FilePath, PlatformFileHandle});
         }
         
         void OnCloseFile
- (void* PlatformFileHandle)
+        (void* PlatformFileHandle)
         {
             rstd_ScopeLock(Mutex);
             OpenFiles.RemoveFirstIfWithAssert(
- [=](auto& File){ return File.PlatformFileHandle == PlatformFileHandle; });
+                                              [=](auto& File){ return File.PlatformFileHandle == PlatformFileHandle; });
         }
     };
     
@@ -6011,7 +6420,7 @@ namespace rstd
     }
     
     backward_singly_linked_list_with_counter<file_info> GetFileInfos
- (arena& Arena, const char* DirectoryPath)
+    (arena& Arena, const char* DirectoryPath)
     {
         backward_singly_linked_list_with_counter<file_info> FileInfos = ShareArena(Arena);
         
@@ -6043,7 +6452,7 @@ namespace rstd
     //       Or you can do:
     //       namespace win32
     //       {
-    //			#include <windows.h>
+    //            #include <windows.h>
     //       }
     
 #undef CopyFile // TODO: What to do about those stupid macros and repeated names (same name in rstd and win32)
@@ -6064,14 +6473,14 @@ namespace rstd
     { return (rstd_bool)CopyFileA(ExistingFilePath, NewFilePath, (BOOL)FailOrOverride); }
     
     rstd_bool FileExists
- (const char* Path)
+    (const char* Path)
     {
         u32 Attrib = GetFileAttributes(Path);
         return Attrib != INVALID_FILE_ATTRIBUTES && !(Attrib & FILE_ATTRIBUTE_DIRECTORY);
     }
     
     rstd_bool DirectoryExists
- (const char* Path)
+    (const char* Path)
     {
         u32 Attrib = GetFileAttributes(Path);
         return Attrib != INVALID_FILE_ATTRIBUTES && (Attrib & FILE_ATTRIBUTE_DIRECTORY);
@@ -6079,7 +6488,7 @@ namespace rstd
     
     // TODO: Make OpenFile api support control over dwShareMode, dwCreationDisposition, dwFlagsAndAttributes
     file OpenFile
- (const char* FilePath, io_mode Mode)
+    (const char* FilePath, io_mode Mode)
     {
         file File = {};
         
@@ -6119,7 +6528,7 @@ namespace rstd
     }
     
     rstd_bool Close
- (file& File)
+    (file& File)
     { 
         rstd_bool Succeded = (rstd_bool)CloseHandle(File.PlatformFileHandle);
         if(Succeded)
@@ -6129,7 +6538,7 @@ namespace rstd
     }
     
     OVERLAPPED MakeOverlapped
- (u64 Pos)
+    (u64 Pos)
     {
         OVERLAPPED Overlapped = {};
         Overlapped.Offset = (u32)Pos;
@@ -6138,7 +6547,7 @@ namespace rstd
     }
     
     u32 Write
- (file File, u64 Pos, void* Data, u32 Size)
+    (file File, u64 Pos, void* Data, u32 Size)
     {
         rstd_Assert(File);
         DWORD WrittenBytes;
@@ -6149,7 +6558,7 @@ namespace rstd
     }
     
     u32 Read
- (void* Dest, file File, u64 Pos, u32 Size)
+    (void* Dest, file File, u64 Pos, u32 Size)
     {
         rstd_Assert(File);
         DWORD ReadBytes;
@@ -6161,7 +6570,7 @@ namespace rstd
     
     // TODO: Add u64 version of this function
     rstd_bool SetFileSize
- (file File, u32 Size)
+    (file File, u32 Size)
     {
         LARGE_INTEGER FilePointer = {};
         FilePointer.QuadPart = Size;
@@ -6172,7 +6581,7 @@ namespace rstd
     
     // TODO: Make this function work for size_t
     u32 GetFileSize
- (file File)
+    (file File)
     { 
         LARGE_INTEGER Int;
         if(GetFileSizeEx(File.PlatformFileHandle, &Int))
@@ -6182,7 +6591,7 @@ namespace rstd
     }
     
     char* ReadWholeFile
- (arena& Arena, const char* FilePath)
+    (arena& Arena, const char* FilePath)
     {
         auto File = OpenFile(FilePath, io_mode::Read);
         rstd_defer(Close(File));
@@ -6217,7 +6626,7 @@ namespace rstd
     
     // TODO: Paths longer then MAX_PATH could be a problem here. Should I use unicode versions of DeleteFile and DeleteDirectory?
     rstd_bool DeleteAllContentsOfDirectory
- (const char* Path)
+    (const char* Path)
     {
         string<> SearchPath = Path;
         SearchPath += "/*";
@@ -6253,7 +6662,7 @@ namespace rstd
     }
     
     rstd_bool DeleteDirectoryWithAllContents
- (const char* Path)
+    (const char* Path)
     {
         rstd_bool Success = DeleteAllContentsOfDirectory(Path);
         if(Success)
@@ -6265,7 +6674,7 @@ namespace rstd
     // TIME //
     //////////
     static time ConvertToTime
- (SYSTEMTIME& St)
+    (SYSTEMTIME& St)
     {
         time Time;
         Time.Year = (u32)St.wYear;
@@ -6385,7 +6794,7 @@ namespace rstd
 #define ScopeNoAllocRegistration scope_no_alloc_registration ScopeNoAllocRegis
         
         memory_group* AddMemoryGroup
- (const char* Name)
+        (const char* Name)
         {
             ScopeNoAllocRegistration;
             auto& MemoryGroup = State.MemoryGroups.PushUninitialized();
@@ -6408,10 +6817,10 @@ namespace rstd
         }
         
         void BeginMemoryGroup
- (const char* Name)
+        (const char* Name)
         {
             auto* MemoryGroup = Find(State.MemoryGroups, [=]
- (auto Group){ return strcmp(Group.Name, Name) == 0; });
+                                     (auto Group){ return strcmp(Group.Name, Name) == 0; });
             
             if(!MemoryGroup)
                 MemoryGroup = AddMemoryGroup(Name);
@@ -6423,7 +6832,7 @@ namespace rstd
         { State.CurrentMemoryGroup = State.OthersMemoryGroup; }
         
         void NextCallMemoryGroup
- (const char* Name)
+        (const char* Name)
         {
             BeginMemoryGroup(Name);
             State.JustCalledNextAllocationMemoryGroup = true;
@@ -6450,7 +6859,7 @@ namespace rstd
         }
         
         static void AddStatistic
- (u32* Statistic, u32* MaxStatistic, u32 Delta)
+        (u32* Statistic, u32* MaxStatistic, u32 Delta)
         {
             *Statistic += Delta;
             if(*Statistic > *MaxStatistic)
@@ -6458,35 +6867,35 @@ namespace rstd
         }
         
         static void AddUsedAndSubtractUnused
- (statistics* Stats, u32 Delta)
+        (statistics* Stats, u32 Delta)
         {
             AddStatistic(&Stats->Used, &Stats->UsedPeak, Delta);
             Stats->Unused -= Delta;
         }
         
         static void AddSizeAndUnused
- (statistics* Stats, u32 Delta)
+        (statistics* Stats, u32 Delta)
         { 
             AddStatistic(&Stats->Size, &Stats->SizePeak, Delta);
             Stats->Unused += Delta;
         }
         
         static void SubtractUsedAndAddUnused
- (statistics* Stats, u32 Delta)
+        (statistics* Stats, u32 Delta)
         { 
             Stats->Used -= Delta;
             Stats->Unused += Delta;
         }
         
         static void SubtractSizeAndUnused
- (statistics* Stats, u32 SizeDelta, u32 UnusedDelta)
+        (statistics* Stats, u32 SizeDelta, u32 UnusedDelta)
         { 
             Stats->Size -= SizeDelta; 
             Stats->Unused -= UnusedDelta;
         }
         
         static void AlterStatsOnMemoryBlockAllocation
- (statistics* Stats, u32 NewMemoryBlockSize, u32 PrevMemoryBlockUnusedBytes)
+        (statistics* Stats, u32 NewMemoryBlockSize, u32 PrevMemoryBlockUnusedBytes)
         {
             AddSizeAndUnused(Stats, NewMemoryBlockSize);
             Stats->Unused -= PrevMemoryBlockUnusedBytes;
@@ -6494,7 +6903,7 @@ namespace rstd
         }
         
         static void AlterStatsOnMemoryBlockDeallocation
- (statistics* Stats, u32 MemoryBlockToDeallocateSize, u32 PrevMemoryBlockUnusedBytes)
+        (statistics* Stats, u32 MemoryBlockToDeallocateSize, u32 PrevMemoryBlockUnusedBytes)
         {
             SubtractSizeAndUnused(Stats, MemoryBlockToDeallocateSize, PrevMemoryBlockUnusedBytes);
             Stats->Unused += PrevMemoryBlockUnusedBytes;
@@ -6502,7 +6911,7 @@ namespace rstd
         }
         
         void RegisterCreateArena
- (arena& Arena, const char* ArenaName, const char* MasterArenaName, calling_info CallingInfo)
+        (arena& Arena, const char* ArenaName, const char* MasterArenaName, calling_info CallingInfo)
         {
             if(!State.RegisterAllocations)
                 return;
@@ -6540,14 +6949,14 @@ namespace rstd
         }
         
         static arena_debug_data& GetArenaDebug
- (arena Arena)
+        (arena Arena)
         {
             arena_debug_data* ArenaDebug = nullptr;
             
             for(auto& MemGroup : State.MemoryGroups)
             {
                 ArenaDebug = Find(MemGroup.Arenas,
- [=](auto Ad){ return Ad.Name == Arena.DebugName; });
+                                  [=](auto Ad){ return Ad.Name == Arena.DebugName; });
                 
                 if(ArenaDebug)
                     break;
@@ -6558,7 +6967,7 @@ namespace rstd
         }
         
         void RegisterArenaAllocateNextMemoryBlock
- (arena Arena)
+        (arena Arena)
         {
             if(!State.RegisterAllocations)
                 return;
@@ -6577,7 +6986,7 @@ namespace rstd
         }
         
         void RegisterArenaDeallocateMemoryBlock
- (arena Arena)
+        (arena Arena)
         {
             if(!State.RegisterAllocations)
                 return;
@@ -6595,7 +7004,7 @@ namespace rstd
         }
         
         void SetDebugTemporaryMemory
- (temporary_memory TempMem, rstd_bool Flag)
+        (temporary_memory TempMem, rstd_bool Flag)
         {
             auto& ArenaDebug = GetArenaDebug(*TempMem.Arena);
             ArenaDebug.TemporaryMemory = Flag;
@@ -6608,8 +7017,8 @@ namespace rstd
         { SetDebugTemporaryMemory(TempMem, false); }
         
         void RegisterArenaPush
- (arena Arena, push_size_uninitialized_ex_res Res, size Size,
-  allocation_type AllocationType, calling_info CallingInfo)
+        (arena Arena, push_size_uninitialized_ex_res Res, size Size,
+         allocation_type AllocationType, calling_info CallingInfo)
         {
             if(!State.RegisterAllocations)
                 return;
@@ -6634,7 +7043,7 @@ namespace rstd
         }
         
         void RegisterGenAlloc
- (void* Memory, size Size, calling_info CallingInfo)
+        (void* Memory, size Size, calling_info CallingInfo)
         {
             if(!State.RegisterAllocations)
                 return;
@@ -6650,7 +7059,7 @@ namespace rstd
         }
         
         void RegisterGenFree
- (void* Memory, calling_info CallingInfo)
+        (void* Memory, calling_info CallingInfo)
         {
             if(!State.RegisterAllocations)
                 return;
@@ -6665,12 +7074,12 @@ namespace rstd
             {
                 for(auto& Mg : State.MemoryGroups)
                 {
-                    if(&Mg != &MemGroup)	
+                    if(&Mg != &MemGroup)    
                     {
                         FoundAlloc = Find(Mg.Allocations, AllocComparison);
                         if(FoundAlloc)
                             break;
-                    }	
+                    }    
                 }
             }
             
@@ -6689,12 +7098,12 @@ namespace rstd
                 {
                     for(auto& Mg : State.MemoryGroups)
                     {
-                        if(&Mg != &MemGroup)	
+                        if(&Mg != &MemGroup)    
                         {
                             FoundFreedMemory = Find(Mg.Deallocations, DeallocComparison);
                             if(FoundFreedMemory)
                                 break;
-                        }	
+                        }    
                     }
                 }
                 

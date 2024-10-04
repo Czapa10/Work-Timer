@@ -165,7 +165,7 @@ int main()
         StartHour, StartMinute,
         EndHour, EndMinute;
     };
-    singly_linked_list<chunk> Chunks(ShareArena(Arena));
+    backward_singly_linked_list<chunk> Chunks(ShareArena(Arena));
     
     optional<time> LastEntryTime;
     for(auto& Entry : Entries)

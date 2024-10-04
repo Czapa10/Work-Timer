@@ -165,7 +165,7 @@ int main()
         StartHour, StartMinute,
         EndHour, EndMinute;
     };
-    backward_singly_linked_list<chunk> Chunks(ShareArena(Arena));
+    backward_singly_linked_list_with_counter<chunk> Chunks(ShareArena(Arena));
     
     optional<time> LastEntryTime;
     for(auto& Entry : Entries)
@@ -201,10 +201,13 @@ int main()
     time& StartTime = Entries.GetFirst().Time;
     u32 TotalTimeInMinutes = GetTimeDifferenceInMinutes(StartTime, CurrentTime);
     
+    auto MostRecentChunkIsWorkChunk = [&]()
+    { return Chunks.GetCount() % 2 == 1; };
+    
     u32 WorkTimeInMinutes = TotalTimeInMinutes;
     u32 BreakTimeInMinutes = TotalTimeInMinutes;
     {
-        bool Work = true;
+        bool Work = MostRecentChunkIsWorkChunk();
         for(auto& Chunk : Chunks)
         {
             if(Work)
@@ -264,7 +267,7 @@ int main()
     
     Message += "CHUNKS:\n";
     {
-        bool Work = true;
+        bool Work = MostRecentChunkIsWorkChunk();
         for(auto& Chunk : Chunks)
         {
             const char* Prefix = Work ? "Work" : "Break";
